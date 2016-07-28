@@ -132,7 +132,6 @@ SUBROUTINE DLYAP(A, QQ, Sigma, nx, status)
  
 
     AA = A
-
     DO
 
  

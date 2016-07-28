@@ -12,6 +12,7 @@ contains
 
     real(wp) :: Pt(1,1), TT(1,1), QQ(1,1)
 
+    real(wp) :: Pt2d(2,2), TT2d(2,2), QQ2d(2,2)
     integer :: info
 
     TT = 0.9_wp
@@ -26,6 +27,18 @@ contains
     call dlyap(TT,QQ,Pt,1,info)
     call assert_equals(-1, info)
 
+    TT2d(1,:) = [0.9_wp, 0.01_wp]
+    TT2d(2,:) = [0.3_wp, 0.10_wp]
+
+    QQ2d(1,:) = [1.0_wp, 0.5_wp]
+    QQ2d(2,:) = [0.5_wp, 2.0_wp]
+
+    call dlyap(TT2d,QQ2d,Pt2d,2,info)
+
+    call assert_equals(0, info)
+    call assert_equals(5.47135633_wp, Pt2d(1,1), 0.000001_wp)
+    call assert_equals(2.18292845_wp, Pt2d(1,2), 0.000001_wp)
+    call assert_equals(2.64989674_wp, Pt2d(2,2), 0.000001_wp)
   end subroutine test_dlyap
   
   subroutine test_determinant
