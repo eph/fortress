@@ -65,7 +65,7 @@ contains
   end subroutine test_model_policy
 
 
-  subroutine test_model_policy
+  subroutine test_model_policy_1
 
     use test_model_t, only : model
 
@@ -82,7 +82,7 @@ contains
     converged = m%solve([0.4_wp, 0.3_wp])
     states_new = m%policy_function([0.2_wp, 0.4_wp], [1.0_wp])
 
-  end subroutine test_model_policy
+  end subroutine test_model_policy_1
 
 
 

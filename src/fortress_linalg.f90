@@ -39,6 +39,7 @@ contains
     end do
   end function determinant
 
+#:if defined('SLICOT')
   subroutine dlyap(TT, RQR, P0, ns, info)
     ! Computes the solution to the discrete Lyapunov equation,
     !      P0 = TT*P0*TT' + RQR
@@ -78,7 +79,130 @@ contains
     end if
 
   end subroutine dlyap
+#:else
+! from elmar
+SUBROUTINE DLYAP(A, QQ, Sigma, nx, status)
 
+    ! doubling, calling DSYMM and DGEMM
+
+    ! Sigma = A * Sigma * A' + B * B'
+
+    ! output Sigma is symmetric
+
+    IMPLICIT NONE
+
+    integer, intent(in) :: nx
+    
+    integer, intent(out) :: status
+
+    real(wp), intent(in) :: QQ(nx,nx), A(nx,nx)
+    real(wp), intent(out) :: Sigma(nx,nx)
+    
+    
+
+    INTEGER, PARAMETER :: maxiter = 100
+
+    DOUBLE PRECISION, PARAMETER :: tol = 1.0d-8
+
+ 
+    INTEGER :: iter, i
+    LOGICAL :: converged
+
+    DOUBLE PRECISION, DIMENSION(Nx,Nx) :: AA, AAA, AASigma, Sigma0
+
+
+ 
+    Sigma0 = QQ
+    ! Sigma0 = B B'
+
+    ! Sigma0 = 0.0d0
+
+    ! call DSYRK('U','N',Nx,Nw,1.0d0,B,Nx,0.0d0,Sigma0,Nx)
+
+    ! ! fill up lower triangular -- necessary for DGEMM below
+
+    ! FORALL (i=2:Nx) Sigma0(i,1:i-1) = Sigma0(1:i-1,i)
+
+ 
+
+    converged = .false.
+
+    iter = 0
+
+ 
+
+    AA = A
+
+    DO
+
+ 
+
+       iter = iter + 1
+
+ 
+
+       ! call sandwichplus(Sigma, AA, Nx, Sigma0, Nx)
+
+       ! MANUAL SANDWICHPLUS: Sigma = AA * Sigma0 * AA' + Sigma
+
+       call DSYMM('R','U',Nx,Nx,1.0d0,Sigma0,Nx,AA,Nx,0.0d0,AASigma,Nx)
+
+       Sigma = Sigma0 ! this line requires Sigma0 to
+
+       call DGEMM('N','T',Nx,Nx,Nx,1.0d0,AASigma,Nx,AA,Nx,1.0d0,Sigma,Nx)
+
+ 
+
+       ! balance for symmetry
+
+       Sigma = 0.5d0 * (Sigma + transpose(Sigma))
+
+ 
+
+       IF (abs(maxval(Sigma - Sigma0)) < tol) converged = .true.      
+
+ 
+
+       ! print *, iter, abs(maxval(Sigma - Sigma0)), tol
+
+       ! Sigma = (Sigma + transpose(Sigma)) / dble(2)
+
+ 
+
+       IF (converged .OR. (iter > maxiter)) EXIT
+
+ 
+
+       ! AAA = AA * AA
+
+       call DGEMM('N','N',Nx,Nx,Nx,1.0d0,AA,Nx,AA,Nx,0.0d0,AAA,Nx)
+
+       AA     = AAA
+
+       Sigma0 = Sigma
+
+ 
+
+    END DO
+
+ 
+
+    IF (converged) THEN
+
+       status = 0
+
+    ELSE
+
+       status = -1
+
+    END IF
+
+ 
+
+ 
+
+  END SUBROUTINE DLYAP
+#:endif
 
 
 end module fortress_linalg
