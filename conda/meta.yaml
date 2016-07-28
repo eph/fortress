@@ -1,0 +1,30 @@
+package:
+  name: fortress
+  version: 0.0.0
+
+source:
+  path: ..
+
+build:
+  binary_relocation: true
+
+requirements:
+  build:
+    - gcc-5
+    - libgcc
+    - flap
+    - fruitpy
+    - fypp
+
+  run:
+    - python
+    - flap
+    - fruitpy
+
+
+
+test:
+  requires:
+    - python
+    - fruit
+    - fruitpy
