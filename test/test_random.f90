@@ -17,8 +17,10 @@ contains
     x = rn%norm_rvs(10000,1)
     call assert_equals(0.0_wp, sum(x)/10000, 0.005_wp)
     x = rn%norm_rvs(10000,1,mu=1.0_wp)
-    call assert_equals(0.0_wp, sum(x)/10000, 1.005_wp)
+    call assert_equals(1.0_wp, sum(x)/10000, 0.005_wp)
 
+    x = rn%uniform_rvs(10000,1)
+    call assert_equals(0.5_wp, sum(x)/10000, 0.005_wp)
   end subroutine test_random_init
 
 end module test_random

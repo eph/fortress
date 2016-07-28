@@ -67,6 +67,10 @@ contains
     self%DD = 0.0_wp ; self%ZZ = 0.0_wp ; self%HH = 0.0_wp
 
     self%ZZ(1,:) = [1.0_wp, 1.0_wp]
+
+
+    self%HH = 0.1_wp
+
     
     error = 0
   end subroutine system_matrices

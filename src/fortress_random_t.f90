@@ -80,26 +80,33 @@ contains
   end function norm_rvs
 
   function uniform_rvs(rn, dim_a, dim_b, lb, ub) result(rvs)
-      class(fortress_random) :: rn
-      integer, intent(in) :: dim_a, dim_b
+    class(fortress_random) :: rn
+    integer, intent(in) :: dim_a, dim_b
 
-      double precision :: rvs(dim_a, dim_b)
+    double precision :: rvs(dim_a, dim_b)
 
-      double precision, intent(in), optional :: lb, ub
-      double precision :: rvs_lb, rvs_ub
-      
-      integer :: errcode 
+    double precision, intent(in), optional :: lb, ub
+    double precision :: rvs_lb, rvs_ub
 
-      rvs_lb = rn%uniform_lb
-      rvs_ub = rn%uniform_ub
+    integer :: errcode, i, j
 
-      if (present(lb)) rvs_lb = lb
-      if (present(ub)) rvs_ub = ub
+    rvs_lb = rn%uniform_lb
+    rvs_ub = rn%uniform_ub
 
-#:if FC > 0
-      errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
+    if (present(lb)) rvs_lb = lb
+    if (present(ub)) rvs_ub = ub
+#:if FC==0
+    do j = 1, dim_b
+
+       do i = 1, dim_a
+          rvs(i,j) = rand_uniform(rvs_lb, rvs_ub)
+       end do
+
+    end do
+#:elif FC > 0
+    errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
 #:endif
-    end function uniform_rvs
+  end function uniform_rvs
 
   ! function beta_rvs(self, dim_a, dim_b, mean, std) result(ans)
 

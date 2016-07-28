@@ -1,4 +1,5 @@
 module fortress_particle_filter_t
+  use, intrinsic :: iso_fortran_env, only: wp => real64
 
   use fortress_bayesian_model_t, only: fortress_ss_model
   use fortress_particles_t, only: fortress_particles
@@ -22,6 +23,8 @@ module fortress_particle_filter_t
      class(fortress_ss_model), allocatable :: m
      type(fortress_random) :: rng
 
+     logical :: USE_MPI = .true.
+
    contains
 
      procedure :: lik 
@@ -41,20 +44,28 @@ contains
 
     integer, optional, intent(in) :: npart, nproc, seed, rank
 
-    integer :: rng_seed
+    integer :: rng_seed, rank_opt
     
     allocate(ppf%m, source=m)
 
     if (present(npart)) ppf%npart = npart
     if (present(npart)) ppf%nproc = nproc
+
     !if (present(nlocalpart)) ppf%nlocalpart = nlocalpart
     !if (present(nforeignpart)) ppf%nforeignpart = nforeignpart
     !if (present(naltpart)) ppf%naltpart = naltpart
 
     ppf%nlocalpart = ppf%npart / ppf%nproc
-    ppf%nforeignpart = ppf%nlocalpart / 1.5d0
-    ppf%naltpart = ppf%nlocalpart / 2.0d0
 
+    if (nproc==1) then
+       ppf%nforeignpart = 0.0_wp
+       ppf%naltpart = 0.0_wp
+       ppf%USE_MPI = .false.
+    else
+       ppf%nforeignpart = ppf%nlocalpart / 1.5d0
+       ppf%naltpart = ppf%nlocalpart / 2.0d0
+    end if
+    
     if (rank==0) then
        print *, 'Initializing a parallel particle filter '
        print *, 'nlocalpart = ', ppf%nlocalpart, 'nproc = ', ppf%nproc
@@ -68,7 +79,6 @@ contains
     end if
 
     ppf%rng = fortress_random(seed=rng_seed)
-    !ppf%m = m
 
     allocate(ppf%adjusted_proposal(ppf%m%T), ppf%adjusted_proposal_mu(ppf%m%T, ppf%m%neps), &
          ppf%adjusted_proposal_std(ppf%m%T))
@@ -138,10 +148,18 @@ contains
     save_states_opt = .false.
     if (present(save_states)) save_states_opt = save_states
 
-    converged = ppf%m%solve(para, nproc, rank)
-    !if (rank==0) print*,'entering particle filter'
+    if (ppf%USE_MPI) then
+       converged = ppf%m%solve(para, nproc, rank)
+    else
+       converged = ppf%m%solve(para)
+       call mpi_init()
+    end if
+       
+    if (rank==0) print*,'entering particle filter'
     lik = 0.0d0
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+
+
+    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
 
     if (converged .eqv. .false.) then
        lik = -1000000000000.0d0
@@ -175,7 +193,7 @@ contains
 
     !if (rank==0) call ppf%m%describe_params()
     !if (rank==0) print*, old_local%particles(:,1)
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
 
     !if (rank==0) print*,'entering first initializaztion'
     ! first initialization
@@ -222,7 +240,7 @@ contains
 
 
     ! second initialization
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
     !if (rank==0) print*,'entering second initialization'
 
     do t = 1, ppf%initialization_T
@@ -250,24 +268,29 @@ contains
     end if
     old_copy = old_local 
 
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
 
     old_copy%weights = 1.0d0 / (ppf%nlocalpart * nproc)
     old_local%weights = 1.0d0 / (ppf%nlocalpart * nproc)
+
+
+
 
     ! ! the particle filter
     !if (rank==0) print*,'entering loop'
     do t = 1, ppf%m%T
 
-       call mpi_irecv(old_foreign%particles, ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
-            left, 1, MPI_COMM_WORLD, mpi_req_recv1, mpierror)
-       call mpi_irecv(old_foreign%weights, ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
-            left, 1, MPI_COMM_WORLD, mpi_req_recv2, mpierror)
-       call mpi_isend(old_copy%particles(:,1:ppf%nforeignpart), ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
-            right, 1, MPI_COMM_WORLD, mpi_req_send1, mpierror)
-       call mpi_isend(old_copy%weights(1:ppf%nforeignpart), ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
-            right, 1, MPI_COMM_WORLD, mpi_req_send2, mpierror)
 
+       if (ppf%USE_MPI) then
+          call mpi_irecv(old_foreign%particles, ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+               left, 1, MPI_COMM_WORLD, mpi_req_recv1, mpierror)
+          call mpi_irecv(old_foreign%weights, ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+               left, 1, MPI_COMM_WORLD, mpi_req_recv2, mpierror)
+          call mpi_isend(old_copy%particles(:,1:ppf%nforeignpart), ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+               right, 1, MPI_COMM_WORLD, mpi_req_send1, mpierror)
+          call mpi_isend(old_copy%weights(1:ppf%nforeignpart), ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+               right, 1, MPI_COMM_WORLD, mpi_req_send2, mpierror)
+       end if
        ! draw shocks and regimes
        shocks = ppf%rng%norm_rvs(ppf%m%neps, ppf%nlocalpart)
 
@@ -293,14 +316,14 @@ contains
           new_local%weights(j) = old_local%weights(ppf%nforeignpart+j) * incwt 
        end do
 
-       call mpi_wait(mpi_req_recv1, mpi_recv_status1, mpierror) 
+       if (ppf%USE_MPI) call mpi_wait(mpi_req_recv1, mpi_recv_status1, mpierror) 
 
        do j = 1, ppf%nforeignpart
           new_local%particles(:,foreignpartstart+j) = ppf%m%policy_function(old_foreign%particles(:,j), &
                shocks(:,foreignpartstart+j))
        end do
 
-       call mpi_wait(mpi_req_recv2, mpi_recv_status2, mpierror)
+       if (ppf%USE_MPI) call mpi_wait(mpi_req_recv2, mpi_recv_status2, mpierror)
 
        do j = 1, ppf%nforeignpart
           incwt = ppf%m%pdfy(t, new_local%particles(:, foreignpartstart+j), &
@@ -309,8 +332,8 @@ contains
           new_local%weights(foreignpartstart+j) = old_foreign%weights(j) * incwt
        end do
 
-       call mpi_wait(mpi_req_send1, mpi_send_status1,mpierror)
-       call mpi_wait(mpi_req_send2, mpi_send_status2,mpierror)
+       if (ppf%USE_MPI) call mpi_wait(mpi_req_send1, mpi_send_status1,mpierror)
+       if (ppf%USE_MPI) call mpi_wait(mpi_req_send2, mpi_send_status2,mpierror)
 
        ! could be speed up
        if (ppf%adjusted_proposal(t)) then
@@ -334,7 +357,7 @@ contains
        ! check the particles
        call new_local%normalize_weights(py)
        ess = new_local%ess()
-       call mpi_allreduce(ess, min_ess, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, mpierror)         
+       if (ppf%USE_MPI) call mpi_allreduce(ess, min_ess, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, mpierror)         
        !new_local%weights = new_local%weights * relative_weight 
 
        ! check lnpy
@@ -352,7 +375,11 @@ contains
        ! end if
        ! totsumproby = 0.0d0
        py_across_procs = 0.0d0
-       call mpi_allreduce(py, py_across_procs, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpierror)
+       if (ppf%USE_MPI) then 
+          call mpi_allreduce(py, py_across_procs, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpierror)
+       else
+          py_across_procs = py
+       end if
        relative_weight = py / py_across_procs
 
        lik = lik + log(py_across_procs)
@@ -365,58 +392,60 @@ contains
        old_local = new_local
 
 
-       py = sum(old_local%weights)
-       py_vector = 0.0d0
-       call mpi_allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
-       effective_procs = 1.0d0 / sum(py_vector**2)
-
-       !if (rank==0) print*,'before passing', t, effective_procs 
-       if (effective_procs < (nproc/2.0d0)) then 
-          ! sort processors by relative weight, partner 
-          remaining_procs = .true.
-          do i = 1, nproc
-             ranked_procs(i) = minloc(py_vector, dim=1, mask=remaining_procs) - 1
-             remaining_procs(ranked_procs(i)+1) = .false.
-          end do
-          partner = nproc - minloc(ranked_procs, dim=1, mask=ranked_procs==rank) + 1
-          partner = ranked_procs(partner)
-          !print*,'left', left, 'partner', partner
-
-          ! pass the last nalt particlse
-          call mpi_barrier(MPI_COMM_WORLD, mpierror)
-
-          alt_copy%particles = old_local%particles(:,ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
-          alt_copy%weights = old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
-
-          call mpi_irecv(alt_foreign%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
-               partner, 2, MPI_COMM_WORLD, mpi_req_recv3, mpierror)
-          call mpi_irecv(alt_foreign%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, &
-               2, MPI_COMM_WORLD, mpi_req_recv4, mpierror)
-
-          call mpi_isend(alt_copy%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
-               partner, 2, MPI_COMM_WORLD, mpi_req_send3, mpierror)
-          call mpi_isend(alt_copy%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, 2, &
-               MPI_COMM_WORLD, mpi_req_send4, mpierror)
-
-          call mpi_wait(mpi_req_send3, mpi_send_status3, mpierror)
-          call mpi_wait(mpi_req_send4, mpi_send_status4, mpierror)
-          call mpi_wait(mpi_req_recv3, mpi_recv_status3, mpierror)
-          call mpi_wait(mpi_req_recv4, mpi_recv_status4, mpierror)
-
-          old_local%particles(:, ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%particles
-          old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%weights
-
+       if (ppf%USE_MPI) then
           py = sum(old_local%weights)
           py_vector = 0.0d0
           call mpi_allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
           effective_procs = 1.0d0 / sum(py_vector**2)
-          !if (rank==0) print*, 'after passing', t, effective_procs 
+
+          !if (rank==0) print*,'before passing', t, effective_procs 
+          if (effective_procs < (nproc/2.0d0)) then 
+             ! sort processors by relative weight, partner 
+             remaining_procs = .true.
+             do i = 1, nproc
+                ranked_procs(i) = minloc(py_vector, dim=1, mask=remaining_procs) - 1
+                remaining_procs(ranked_procs(i)+1) = .false.
+             end do
+             partner = nproc - minloc(ranked_procs, dim=1, mask=ranked_procs==rank) + 1
+             partner = ranked_procs(partner)
+             !print*,'left', left, 'partner', partner
+
+             ! pass the last nalt particlse
+             call mpi_barrier(MPI_COMM_WORLD, mpierror)
+
+             alt_copy%particles = old_local%particles(:,ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
+             alt_copy%weights = old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
+
+             call mpi_irecv(alt_foreign%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
+                  partner, 2, MPI_COMM_WORLD, mpi_req_recv3, mpierror)
+             call mpi_irecv(alt_foreign%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, &
+                  2, MPI_COMM_WORLD, mpi_req_recv4, mpierror)
+
+             call mpi_isend(alt_copy%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
+                  partner, 2, MPI_COMM_WORLD, mpi_req_send3, mpierror)
+             call mpi_isend(alt_copy%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, 2, &
+                  MPI_COMM_WORLD, mpi_req_send4, mpierror)
+
+             call mpi_wait(mpi_req_send3, mpi_send_status3, mpierror)
+             call mpi_wait(mpi_req_send4, mpi_send_status4, mpierror)
+             call mpi_wait(mpi_req_recv3, mpi_recv_status3, mpierror)
+             call mpi_wait(mpi_req_recv4, mpi_recv_status4, mpierror)
+
+             old_local%particles(:, ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%particles
+             old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%weights
+
+             py = sum(old_local%weights)
+             py_vector = 0.0d0
+             call mpi_allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
+             effective_procs = 1.0d0 / sum(py_vector**2)
+             !if (rank==0) print*, 'after passing', t, effective_procs 
+
+          end if
+
+          old_copy%particles = old_local%particles(:,1:ppf%nforeignpart)
+          old_copy%weights = old_local%weights(1:ppf%nforeignpart)
 
        end if
-
-       old_copy%particles = old_local%particles(:,1:ppf%nforeignpart)
-       old_copy%weights = old_local%weights(1:ppf%nforeignpart)
-
        if (save_states_opt) then
           write(char_rank,'(I3.3)') rank
           write(char_t, '(I3.3)') t
@@ -426,16 +455,16 @@ contains
 
        call mpi_barrier(MPI_COMM_WORLD, mpierror)
        !print*,rank,py_vector
-      end do
+    end do
 
-      ! deallocate
-      call old_local%free()
-      call old_copy%free()
-      call old_foreign%free()
-      call new_local%free()
-      call alt_foreign%free()
-      call alt_copy%free()
+    ! deallocate
+    call old_local%free()
+    call old_copy%free()
+    call old_foreign%free()
+    call new_local%free()
+    call alt_foreign%free()
+    call alt_copy%free()
 
-    end function lik
+  end function lik
 end module fortress_particle_filter_t
 

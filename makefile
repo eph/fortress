@@ -2,11 +2,11 @@ SRC=src
 TEST=test
 VPATH=.:$(SRC):$(TEST):templates
 
-LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o  fortress_model_t.o fortress_particles_t.o fortress_smc_t.o 
+LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o  fortress_model_t.o fortress_particles_t.o fortress_particle_filter.o fortress_smc_t.o 
 
 #LIBOBJS=fortress_prior_t.o fortress_model_t.o fortress_info.o randlib.o 
 
-FC=mpif90 -fbounds-check
+FC=mpif90 -O -Wall -fcheck=all -g -fbacktrace
 ifdef CONDA_BUILD
 LIB=$(PREFIX)/lib
 INC=$(PREFIX)/include
@@ -36,7 +36,7 @@ test_random.o : test_random.f90
 test_library: test_library.f90 libfortress.so
 	$(FC) src/test_library.f90  -L. -lfortress -llapack $(FLAP) -o test_library
 
-test_driver: test_driver.f90 $(LOBJS) test_model_t.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o
+test_driver: test_driver.f90 $(LOBJS) test_model_t.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o 
 	$(FC) $^  -I. $(FRUIT) $(FLAP) -L. -lfortress  -llapack  -o $@ 
 
 libfortress.so: fortress.f90  $(LIBOBJS) 
