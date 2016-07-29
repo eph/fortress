@@ -58,6 +58,8 @@ module fortress_bayesian_model_t
      integer :: ns, neps
      integer :: t0 = 0
 
+     real(wp), allocatable :: HH(:,:)
+
    contains
 
      procedure(policy_function_i), public, deferred :: policy_function
@@ -130,7 +132,7 @@ module fortress_bayesian_model_t
      logical :: NONSTATIONARY = .false.
 
      real(wp), allocatable :: TT(:,:), RR(:,:), QQ(:,:)
-     real(wp), allocatable :: DD(:), ZZ(:,:), HH(:,:)
+     real(wp), allocatable :: DD(:), ZZ(:,:)
 
    contains
 

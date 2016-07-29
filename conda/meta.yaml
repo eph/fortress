@@ -13,18 +13,21 @@ requirements:
     - gcc-5
     - libgcc
     - flap
+    - fruit 
     - fruitpy
     - fypp
 
   run:
     - python
     - flap
+    - fruit
     - fruitpy
-
-
+    - lapack
+    - mpich2
 
 test:
   requires:
-    - python
-    - fruit
     - fruitpy
+    - fortress
+    - lapack
+    - mpich2

@@ -33,7 +33,7 @@ contains
     type(model) :: m
 
     m = model()
-    call assert_equals(0.0_wp, m%lik(m%p0))
+    call assert_equals(-85.82166_wp, m%lik(m%p0), 0.0001_wp)
   
   end subroutine test_model_likelihood
 
