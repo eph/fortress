@@ -1,6 +1,8 @@
 module fortress_particles_t
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
+  use json_module, only: json_core, json_value
+
 
   implicit none
 
@@ -15,12 +17,14 @@ module fortress_particles_t
 
 
      procedure :: mean
+     procedure :: mean_and_variance
      procedure :: normalize_weights
      procedure :: ESS
      procedure :: describe 
      procedure :: systematic_resampling
      procedure :: free
      procedure :: write
+     procedure :: write_json
      !final :: cleanup 
 
   end type fortress_particles
@@ -62,8 +66,12 @@ contains
     class(fortress_particles) :: p
 
     double precision :: effective_sample_size 
+    double precision :: m1, logw(p%npart)
 
-    effective_sample_size = 1.0d0 / sum(p%weights**2)
+    logw = 2.0_wp*log(p%weights)
+    m1 = maxval(logw)
+    
+    effective_sample_size = 1.0d0 / (sum(exp(logw-m1)) * exp(m1))
 
   end function ESS
 
@@ -97,6 +105,21 @@ contains
     end do
 
   end function mean
+
+  subroutine mean_and_variance(p, mean, variance)
+    class(fortress_particles) :: p
+    double precision, intent(out) :: mean(p%nvars), variance(p%nvars, p%nvars)
+    integer :: j
+
+    mean = p%mean()
+    variance = 0.0_wp
+    do j = 1, p%npart
+       call dger(p%nvars, p%nvars, p%weights(j), p%particles(:,j), 1, &
+            p%particles(:,j), 1, variance, p%nvars)
+    end do
+    call dger(p%nvars, p%nvars, -1.0_wp, mean, 1, mean, 1, variance, p%nvars)
+
+  end subroutine mean_and_variance
 
   subroutine systematic_resampling(p, randu, resample_ind)
     class(fortress_particles) :: p
@@ -159,7 +182,22 @@ contains
 
   end subroutine write
 
+  subroutine write_json(self, json_node)
 
+    class(fortress_particles) :: self
+    type(json_value), pointer, intent(inout) :: json_node
+    type(json_core) :: json
+    character(len=3) :: varname
+
+    integer :: j
+    call json%add(json_node, 'weights', self%weights)
+
+    do j = 1, self%nvars
+       write(varname, '(I3.3)') j
+       call json%add(json_node, 'var.'//trim(varname), self%particles(j,:))
+    end do
+
+  end subroutine write_json
   
   subroutine free(p) 
     class(fortress_particles) :: p
@@ -174,7 +212,6 @@ contains
     deallocate(p%particles, p%weights)
 
   end subroutine cleanup
-
 
 
 end module fortress_particles_t

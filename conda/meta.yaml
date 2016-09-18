@@ -10,15 +10,13 @@ build:
 
 requirements:
   build:
-    - gcc-5
-    - libgcc
     - flap
     - fruit 
     - fruitpy
     - fypp
+    - json-fortran
 
   run:
-    - python
     - flap
     - fruit
     - fruitpy
@@ -26,8 +24,16 @@ requirements:
     - mpich2
 
 test:
+  files:
+    - ../test
+  source_files:
+    - test
+    - makefile
+    
   requires:
     - fruitpy
     - fortress
     - lapack
     - mpich2
+    - json-fortran
+    - openblas

@@ -7,7 +7,7 @@
 module fortress_bayesian_model_t
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
-  use fortress_prior_t, only: fortress_abstract_prior
+  use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
   use fortress_util, only: read_array_from_file
   use filter, only: kalman_filter, chand_recursion, kalman_filter_missing, REALLY_NEG
 
@@ -15,6 +15,7 @@ module fortress_bayesian_model_t
   implicit none
 
   real(wp), parameter :: M_PI = 3.14159265358979323846d0
+
 
   type,public,abstract :: fortress_abstract_bayesian_model
 
@@ -25,8 +26,7 @@ module fortress_bayesian_model_t
      integer :: npara
      integer :: nobs, T
 
-     !type(fortress_abstract_prior) :: fortress_prior
-
+     class(fortress_abstract_prior), allocatable :: prior
      real(wp), allocatable :: yy(:,:)
      real(wp), allocatable :: p0(:)
 
@@ -34,8 +34,7 @@ module fortress_bayesian_model_t
 
      procedure :: read_data
      procedure(lik_func), deferred :: lik
-
-     procedure :: inbounds      
+     procedure :: inbounds
      !final :: finalize
      procedure :: construct_abstract_bayesian_model
      generic :: construct_model => construct_abstract_bayesian_model
@@ -43,15 +42,18 @@ module fortress_bayesian_model_t
   end type fortress_abstract_bayesian_model
 
   abstract interface
-     real(wp) function lik_func(self, para) result(l)
+     function lik_func(self, para, T) result(l)
        use, intrinsic :: iso_fortran_env, only: wp => real64
        import :: fortress_abstract_bayesian_model
        implicit none
        class(fortress_abstract_bayesian_model), intent(inout) :: self
        real(wp), intent(in) :: para(self%npara)
-
+       integer, intent(in), optional :: T
+       real(wp) :: l
+       
      end function lik_func
   end interface
+
        
   type,public,extends(fortress_abstract_bayesian_model), abstract :: fortress_ss_model
 
@@ -66,6 +68,7 @@ module fortress_bayesian_model_t
      procedure(pdfy_i), public, deferred :: pdfy
      procedure(logpdfy_kernel_i), public, deferred :: logpdfy_kernel
      procedure :: steadystate
+
      procedure(solve_serial_i), public, deferred :: solve_serial
      procedure(solve_parallel_i), public, deferred :: solve_parallel
      generic :: solve => solve_serial, solve_parallel
@@ -126,10 +129,12 @@ module fortress_bayesian_model_t
 
   end interface
 
-  type,public,extends(fortress_ss_model),abstract :: fortress_lgss_model
+  type,public,extends(fortress_ss_model), abstract :: fortress_lgss_model
 
      logical :: USE_CR = .true.
      logical :: NONSTATIONARY = .false.
+
+     character(len=:), allocatable :: priorfile
 
      real(wp), allocatable :: TT(:,:), RR(:,:), QQ(:,:)
      real(wp), allocatable :: DD(:), ZZ(:,:)
@@ -137,6 +142,7 @@ module fortress_bayesian_model_t
    contains
 
      procedure :: lik => lik_filter
+     procedure :: lik_filter_vec
      procedure :: policy_function => policy_function_lgss
      procedure :: pdfy => pdfy_lgss
      procedure :: logpdfy_kernel => logpdfy_kernel_lgss
@@ -163,7 +169,7 @@ module fortress_bayesian_model_t
 
 contains 
 
-
+    
   !*******************************************************************************
   !>
   !  This routine reads the data file (after allocating yy attribute.)
@@ -217,34 +223,44 @@ contains
 
   end function steadystate
 
-  subroutine construct_lgss_model(self, name, datafile, npara, nobs, T, ns, neps)
+  subroutine construct_lgss_model(self, name, datafile, priorfile, npara, nobs, T, ns, neps)
 
     class(fortress_lgss_model), intent(inout) :: self
 
-    character(len=144), intent(in) :: name, datafile
+    character(len=144), intent(in) :: name, datafile, priorfile
     integer, intent(in) :: nobs, T, ns, neps, npara
 
+    allocate(self%prior, source=model_prior(priorfile))
     call self%construct_model(name, datafile, npara, nobs, T)
-
+    
     self%ns = ns
     self%neps = neps
 
     allocate(self%TT(self%ns, self%ns), self%RR(self%ns, self%neps), self%QQ(self%neps, self%neps), &
          self%ZZ(self%nobs, self%ns), self%DD(self%nobs), self%HH(self%nobs, self%nobs))
 
-
   end subroutine construct_lgss_model
   !*******************************************************************************
   !>
   !
-  real(wp) function lik_filter(self, para)
+  function lik_filter_vec(self, para, T) result(l)
 
     class(fortress_lgss_model), intent(inout) :: self
     real(wp), intent(in) :: para(self%npara)
-
+    integer, intent(in) :: T
+    real(wp) :: l(T)
     integer :: error
 
-    lik_filter = REALLY_NEG
+
+    l = 0.0_wp
+    if (T==0) return
+    l(1) = REALLY_NEG
+
+    if ( (T < 0) .or. (T>self%T)) then
+       print*,'ERROR: Bad T'
+       stop
+    end if
+
     if (.not. self%inbounds(para)) return
 
 
@@ -252,21 +268,33 @@ contains
     if (error /= 0) return
 
 
-    associate(yy => self%yy, TT => self%TT, RR => self%RR, QQ => self%QQ, &
-         DD => self%DD, ZZ => self%ZZ, HH => self%HH, T => self%T, ny => self%nobs, &
+    associate(yy => self%yy(:,1:T), TT => self%TT, RR => self%RR, QQ => self%QQ, &
+         DD => self%DD, ZZ => self%ZZ, HH => self%HH, ny => self%nobs, &
          ns => self%ns, neps => self%neps, t0 => self%t0)
 
     if (self%MISSING_DATA) then
-       lik_filter = kalman_filter_missing(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
+       l = kalman_filter_missing(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
     elseif (self%USE_CR) then
-       lik_filter = chand_recursion(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
+       l = chand_recursion(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
     else
-       lik_filter = kalman_filter(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
+       l = kalman_filter(yy,TT,RR,QQ,DD,ZZ,HH,ny,T,neps,ns,t0)
     end if
   end associate
-end function lik_filter
+end function lik_filter_vec
 
+real(wp) function lik_filter(self, para, T) result(l)
 
+  class(fortress_lgss_model), intent(inout) :: self
+  real(wp), intent(in) :: para(self%npara)
+  integer, intent(in), optional :: T
+  integer :: use_T
+  
+  use_T = self%T
+  if (present(T)) use_T = T
+
+  l = sum(self%lik_filter_vec(para, T=use_T))
+
+end function
 double precision function pdfy_lgss(m, t, states_new, states_old, para) result(pdf)
     class(fortress_lgss_model), intent(inout) :: m 
 
@@ -362,9 +390,35 @@ logical function inbounds(self, para)
   class(fortress_abstract_bayesian_model), intent(in) :: self
   real(wp) :: para(self%npara)
 
+  integer :: j
+  
   inbounds = .true.
 
+
+  associate(prior => self%prior)
+  select type(prior)
+  class is (model_prior)
+ 
+     do j = 1, prior%npara
+        if ( (para(j) < prior%plower(j)) .or. &
+             (para(j) > prior%pupper(j))) then
+           inbounds = .false.
+        end if
+     end do
+
+
+  class default
+     inbounds = .true.
+  end select
+  end associate
 end function inbounds
+
+
+
+
+
+
+
 !*******************************************************************************
 !>
 !  Finalizer for [[fortress_abstract_bayesian_model]].

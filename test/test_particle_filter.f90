@@ -16,8 +16,10 @@ contains
     type(model) :: test_model
     type(ParallelParticleFilter) :: ppf
 
-    integer :: rank, nproc, npart
+    integer :: rank, nproc, npart, mpierror
     real(wp) :: lik0 
+    logical :: is_initialized
+
 
     npart = 100000
     test_model = model()
@@ -27,7 +29,10 @@ contains
     call assert_equals(npart, ppf%npart)
     call assert_equals(0, ppf%nforeignpart)
 
-    call mpi_init()
+    call mpi_initialized(is_initialized, mpierror)
+    if (.not. is_initialized) call mpi_init(mpierror)
+
+
 
     ppf%USE_MPI = .true.    
     lik0 = ppf%lik(test_model%p0,0,1)

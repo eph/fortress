@@ -58,4 +58,25 @@ contains
     
   end subroutine test_determinant
 
+
+  subroutine test_cholesky
+
+    use fortress_linalg, only: cholesky
+
+    integer :: n, info
+    real(wp) :: res, X(2,2)
+    
+    n = 2
+    X(1,:) = [1.0_wp, 0.3_wp]
+    X(2,:) = [0.3_wp, 2.0_wp]
+
+    call cholesky(X, info)
+    
+    call assert_equals(1.0_wp, X(1,1),0.000001_wp)
+    call assert_equals(0.0_wp, X(1,2),0.000001_wp)
+    call assert_equals(0.3_wp, X(2,1),0.000001_wp)
+    call assert_equals(1.382075_wp, X(2,2), 0.000001_wp)
+
+  end subroutine test_cholesky
+
 end module test_linalg

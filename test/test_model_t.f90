@@ -20,12 +20,13 @@ contains
 
   type(model) function new_model() result(self)
 
-    character(len=144) :: name, datafile
+    character(len=144) :: name, datafile, priorfile
     integer :: nobs, T, ns, npara, neps
     
     name = 'ss'
     datafile = '/home/eherbst/Dropbox/code/fortress/test/test_data.txt'
-    
+    priorfile = '/home/eherbst/Dropbox/code/fortress/test/test_prior_model.txt'
+
     nobs = 1
     T = 80
     
@@ -33,7 +34,7 @@ contains
     npara = 2
     neps = 1
 
-    call self%construct_model(name, datafile, npara, nobs, T, ns, neps)
+    call self%construct_model(name, datafile, priorfile, npara, nobs, T, ns, neps)
 
     self%p0 = [0.2_wp, 0.5_wp]
 

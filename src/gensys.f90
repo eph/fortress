@@ -8,7 +8,8 @@ module gensys
 
   use, intrinsic :: iso_fortran_env, only: wp => real64 
 
-  use omp_lib
+  use fortress_util, only: write_array_to_file
+  !use omp_lib
 
  
 
@@ -16,30 +17,19 @@ module gensys
 
   implicit none
 
- 
-
-  !integer, parameter :: wp = kind(1.0d0)
-
- 
-
   real, parameter :: verysmall = 0.000001_wp
 
  
 
-  complex(wp), parameter :: CPLX_ZERO = dcmplx(0.0_wp,0.0_wp)
-
-  complex(wp), parameter :: CPLX_ONE = dcmplx(1.0_wp, 0.0_wp)
-
-  complex(wp), parameter :: CPLX_NEGONE = dcmplx(-1.0_wp, 0.0_wp)
+  double complex, parameter :: CPLX_ZERO = dcmplx(0.0_wp,0.0_wp)
+  double complex, parameter :: CPLX_ONE = dcmplx(1.0_wp, 0.0_wp)
+  double complex, parameter :: CPLX_NEGONE = dcmplx(-1.0_wp, 0.0_wp)
 
  
 
   integer :: nunstab = 0
-
   integer :: zxz = 0
-
   integer :: fixdiv = 1
-
   real(wp) :: stake = 1.01_wp
 
  
@@ -68,29 +58,29 @@ contains
 
     !f2py depend(size(G0,1)) TT, C0, RR
 
-    complex(wp), dimension(size(G0,1), size(G0, 1)) :: Q, Z, AA, BB, cG0,cG1
+    double complex, dimension(size(G0,1), size(G0, 1)) :: Q, Z, AA, BB, cG0,cG1
 
-    complex(wp), dimension(size(G0,1)) :: alpha, beta
+    double complex, dimension(size(G0,1)) :: alpha, beta
 
-    complex(wp) :: cRR(size(G0,1), size(PSI,2))
+    double complex :: cRR(size(G0,1), size(PSI,2))
 
     integer, intent(out) :: eu(2)
 
-    complex(wp), allocatable :: etawt(:,:), zwt(:,:)
+    double complex, allocatable :: etawt(:,:), zwt(:,:)
 
     integer :: info, pin, n, i, ipiv(size(G0,1)), ldzt, nstab
 
  
 
-    complex(wp), allocatable :: Qstab(:,:), Qunstab(:,:)
+    double complex, allocatable :: Qstab(:,:), Qunstab(:,:)
 
     ! svd  stuff
 
-    complex(wp), allocatable :: eta_u(:,:), eta_v(:,:), zwt_u(:,:), zwt_v(:,:)
+    double complex, allocatable :: eta_u(:,:), eta_v(:,:), zwt_u(:,:), zwt_v(:,:)
 
     real(wp), allocatable :: eta_s(:), zwt_s(:)
 
-    complex(wp), allocatable :: zwt_u_tran(:,:), int_mat(:,:), int_mat2(:,:), tmat(:,:), vv2(:,:), cPI(:,:)
+    double complex, allocatable :: zwt_u_tran(:,:), int_mat(:,:), int_mat2(:,:), tmat(:,:), vv2(:,:), cPI(:,:)
 
  
 
@@ -100,48 +90,26 @@ contains
 
     real(wp) :: norm
 
- 
-
-    !test stuff
-
-    real(wp), dimension(50,50) :: sreal, simag, treal, timag, qreal, qimag, zreal, zimag
-
- 
-
- 
-
     eu      = (/0, 0/)
-
     nbigev  = 0
-
     n       = size(G0,1)
-
     pin     = size(PI,2)
-
     zxz     = 0
-
     nunstab = 0
-
     stake   = 1.01_wp
-
     fixdiv  = 1
 
  
 
     fmat = 0
-
     ywt = 0
-
     gev = 0
-
     fwt = 0
 
  
 
     TT = 0.0_wp
-
     CC = 0.0_wp
-
     RR = 0.0_wp
 
  
@@ -153,15 +121,10 @@ contains
     !-------------------------------------------------
 
     if (pin==0) then
-
        eu = 1
-
        TT = -G1
-
        RR = -PSI
-
        return
-
     end if
 
  
@@ -170,30 +133,17 @@ contains
 
     allocate(cPI(n, pin))
 
- 
-
     cPI = dcmplx(PI)
 
- 
-
     call qz(G0, G1, AA, BB, Q, Z, alpha, beta, n, info)
-
     Q = transpose(conjg(Q))
 
- 
-
- 
 
     if (zxz == 1) then
-
        print *, "Coincident zeros. Indeterminacy and/or nonexistance."
-
        eu = -2
-
        deallocate(cPI)
-
        return
-
     end if
 
  
@@ -202,37 +152,16 @@ contains
 
     nstab = n - nunstab
 
- 
-
- 
-
- 
-
     if (nstab == 0) then
-
        eu = -2
-
        deallocate(cPI)
-
        return
-
     end if
-
- 
-
- 
 
     allocate(Qstab(nstab, n), Qunstab(nunstab, n))
 
- 
-
     Qstab = Q(1:nstab, :)
-
     Qunstab = Q(nstab+1:n,:)
-
- 
-
- 
 
  
 
@@ -240,6 +169,11 @@ contains
 
     allocate(etawt(nunstab, pin))
 
+    ! if (nunstab==11) then
+    !    eu = 5
+    !    call write_array_to_file('badGAM0.txt', G0)
+    !    return 
+    ! end if
  
 
     call zgemm('n','n', nunstab, pin, n, CPLX_ONE, Qunstab, nunstab, &
@@ -247,47 +181,40 @@ contains
          cPI, n, CPLX_ZERO, etawt, nunstab)
 
     lmin = min(nunstab, pin)
+    print*,'lmin', lmin
 
- 
 
     allocate(eta_u(nunstab, lmin), eta_s(lmin), eta_v(lmin, pin))
 
     call zsvd(etawt, eta_u, eta_s, eta_v, nunstab, pin, lmin)
 
- 
-
+    print*,nunstab,size(eta_s,1)
     do i = 1,size(eta_s,1)
-
        if (eta_s(i) > verysmall) nbigev = nbigev + 1
-
-    end do
+     end do
 
  
 
     if (nbigev >= nunstab) eu(1) = 1
-
+    print*,'eu(1) = ', eu(1)
  
 
    ! zwt
-
     allocate(zwt(nstab, pin))
-
     call zgemm('n','n', nstab, pin, n, CPLX_ONE, Qstab, nstab, &
-
          cPI, n, CPLX_ZERO, zwt, nstab)
 
  
-
     ldzt = min(nstab, pin)
-
     allocate(zwt_u(nstab, ldzt), zwt_s(ldzt), zwt_v(ldzt, pin))
-
     call zsvd(zwt, zwt_u, zwt_s, zwt_v, nstab, pin, ldzt)
 
- 
-
+    nbigev = 0
+    do i = 1, ldzt
+        if (abs(zwt_s(i)) > verysmall) nbigev = nbigev + 1
+    end do
+    print*,'bigev', nbigev
     ! Check for uniques
-
     if (size(zwt_v)==0) then
 
        unique = .true.
@@ -303,24 +230,20 @@ contains
 !!$       call zgemm('n','n',ldzt,pin,lmin,-CPLX_NEGONE,eta_v_squared,lmin,zwt_v,lmin,CPLX_ONE,vv2,lmin)
 
        ! this needs to be put into LAPACK
+       ! print*,'--------'
+       print*,shape(eta_v), shape(transpose(conjg(eta_v))), shape(zwt_v)
 
        vv2 = zwt_v - matmul(matmul(eta_v,transpose(conjg(eta_v))),zwt_v);
-
-       call compute_norm(matmul(transpose(vv2), vv2), norm, size(vv2, 2), size(vv2, 2))
-
+       !print*,'1'
+       !call compute_norm(matmul(transpose(vv2), vv2), norm, size(vv2, 2), size(vv2, 2))
+       !print*,'2'
        !print*,norm,'fdsafa'
-
        unique = norm < n*verysmall;
+       deallocate(vv2)
 
     endif
 
    
-
-!    TT(1,5)= zwt(2,1)
-
-!    deallocate(Qstab, Qunstab, cPI, etawt, eta_u, eta_s, eta_v, zwt, zwt_u, zwt_s, zwt_v, vv2)
-
-!    return
 
     if (unique) then
 
@@ -328,9 +251,10 @@ contains
 
     else
 
-       !print*,'Indeterminancy'
+       print*,'Indeterminancy'
 
        eu(2) = 0
+
 
     endif
 
@@ -386,10 +310,10 @@ contains
 
  
 
-    cG0 = cmplx(0.0_wp,0.0_wp)
+    cG0 = dcmplx(0.0_wp,0.0_wp)
 
     cG0(1:(n-nunstab),:) = matmul(tmat,AA)
-
+    !print*,'3'
     do i = n-nunstab+1,n
 
        cG0(i,i) = dcmplx(1.0_wp, 0.0_wp)
@@ -399,7 +323,7 @@ contains
     cG1 = dcmplx(0.0_wp,0.0_wp)
 
     cG1(1:(n-nunstab),:) = matmul(tmat,BB)
-
+    !print*,'4'
  
 
     call zgesv(n, n, cG0, n, ipiv, cG1, n, info)
@@ -430,11 +354,10 @@ contains
 
     deallocate(zwt, zwt_u, zwt_s, zwt_v)!, zwt_u_tran)
 
-    deallocate(int_mat, tmat, vv2, cPI, Qstab, Qunstab)
+    deallocate(int_mat, tmat, cPI, Qstab, Qunstab)
 
  
 
-    !call mkl_free_buffers()
 
   end subroutine do_gensys
 
@@ -444,7 +367,7 @@ contains
 
     ! computes 2-norm of matrix d [m x n]
 
-    complex(wp), intent(in) :: d(m, n)
+    double complex, intent(in) :: d(m, n)
 
     real(wp), intent(out) :: norm
 
@@ -456,7 +379,7 @@ contains
 
     real(wp), allocatable :: rwork(:), norm_m(:)
 
-    complex(wp), allocatable :: work(:)
+    double complex, allocatable :: work(:)
 
  
 
@@ -506,7 +429,7 @@ contains
 
  
 
-    complex(wp), intent(in) :: alpha, beta
+    double complex, intent(in) :: alpha, beta
 
     real(wp) :: A, B, divhat
 
@@ -570,9 +493,9 @@ contains
 
     double precision, intent(in) :: a(n,n), b(n,n)
 
-    complex(wp), intent(out), dimension(n,n) :: q, z, aa, bb
+    double complex, intent(out), dimension(n,n) :: q, z, aa, bb
 
-    complex(wp), intent(out) :: alpha(n), beta(n)
+    double complex, intent(out) :: alpha(n), beta(n)
 
     integer, intent(out) :: info
 
@@ -580,9 +503,9 @@ contains
 
     integer :: n, sdim, lwork, i
 
-    complex(wp), dimension(n, n) :: cplxa, cplxb
+    double complex, dimension(n, n) :: cplxa, cplxb
 
-    complex(wp), allocatable :: work(:)
+    double complex, allocatable :: work(:)
 
     double precision, dimension(8*n) :: rwork
 
@@ -660,21 +583,21 @@ contains
 
     integer, intent(in) :: nrow, ncolumn, nmin
 
-    complex(wp), intent(in) :: A(nrow, ncolumn)
+    double complex, intent(in) :: A(nrow, ncolumn)
 
  
 
-    complex(wp), intent(out) :: U(nrow, nmin), V(nmin, ncolumn)
+    double complex, intent(out) :: U(nrow, nmin), V(nmin, ncolumn)
 
     real(wp), intent(out) :: S(nmin)
 
  
 
-    complex(wp) :: AA(nrow, ncolumn)
+    double complex :: AA(nrow, ncolumn)
 
     integer :: info, lwork
 
-    complex(wp), allocatable :: work(:)
+    double complex, allocatable :: work(:)
 
     real(wp) :: rwork(5*nmin)
 

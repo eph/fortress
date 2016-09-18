@@ -39,6 +39,67 @@ contains
     end do
   end function determinant
 
+  subroutine inverse(X,info)
+
+    real(wp), intent(inout) :: X(:,:)
+    integer, intent(out) :: info
+
+    integer :: r, c, i, ipiv(size(X,1))
+    real(wp) :: work(3*size(X,1))
+
+    r = size(X,1)
+    c = size(X,1)
+
+    info = -1
+    if (r/=c) return
+
+    call dgetrf(r,r,X,r,ipiv,info)
+    call dgetri(r,X,r,ipiv,work,3*r,info)
+
+
+  end subroutine inverse
+
+
+  subroutine cholesky(X,info) 
+
+    real(wp), intent(inout) :: X(:,:)
+    integer, intent(out) :: info
+
+    integer :: r, c, i
+
+    r = size(X,1)
+    c = size(X,1)
+
+    info = -1
+    if (r/=c) return
+
+    call dpotrf('l',r,X,r,info)
+    do i = 1,r-1
+       X(i,i+1:r) = 0.0_wp
+    end do
+    
+  end subroutine
+
+  subroutine Kronecker(ma, na, mb, nb, mc, nc, alpha, beta, A, B, C)
+
+    integer, intent(in) :: ma, na, mb, nb, mc, nc
+    real(wp), intent(in) :: alpha, beta
+    real(wp), dimension(ma,na), intent(in) :: A
+    real(wp), dimension(mb,nb), intent(in) :: B
+    real(wp), dimension(mc,nc), intent(inout) :: C
+
+    integer :: i, j, i1, j1  
+
+    do j = 1, na
+       do i = 1, ma
+          i1 = (i-1)*mb + 1
+          j1 = (j-1)*nb + 1 
+          C(i1:i1+mb-1,j1:j1+nb-1) = alpha*C(i1:i1+mb-1,j1:j1+nb-1) + beta*A(i,j)*B 
+       end do
+    end do
+
+  end subroutine Kronecker
+
 #:if defined('SLICOT')
   subroutine dlyap(TT, RQR, P0, ns, info)
     ! Computes the solution to the discrete Lyapunov equation,

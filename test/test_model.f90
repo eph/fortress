@@ -8,7 +8,7 @@ contains
 
   subroutine test_model_initialize
 
-    use test_model_t, only : model
+    use test_model_t, only : model, new_model
 
     type(model) :: m
 
@@ -29,13 +29,38 @@ contains
   subroutine test_model_likelihood
 
     use test_model_t, only : model
-  
+    use filter, only : REALLY_NEG
     type(model) :: m
+    integer :: i
 
     m = model()
     call assert_equals(-85.82166_wp, m%lik(m%p0), 0.0001_wp)
-  
+
+
+    i = 0
+    if (m%inbounds([-1.0_wp, 1.0_wp])) i = 1
+    call assert_equals(0, i)
+
+    i = 0
+    if ( m%inbounds(m%p0) ) i = 1
+
+    call assert_equals(1, i)
+
+    call assert_equals(REALLY_NEG, m%lik([-1.0_wp, 0.3_wp]), 0.0001_wp)
+
+
   end subroutine test_model_likelihood
+
+  subroutine test_model_prior
+
+    use test_model_t, only : model
+  
+    type(model) :: m
+    
+    m = model()
+    call assert_equals(0.0_wp, m%prior%logpdf(m%p0), 0.0001_wp)
+  
+  end subroutine test_model_prior
 
 
   subroutine test_model_policy

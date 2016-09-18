@@ -31,11 +31,9 @@ contains
     call particles%normalize_weights(mu(1))
     call assert_equals(1000.8_wp, mu(1), 0.000001_wp)
 
-
     call particles%systematic_resampling(0.1_wp)
     mu = particles%mean()
     call assert_equals(1.0_wp, mu(1), 0.000001_wp)
-    
 
   end subroutine test_basic
 

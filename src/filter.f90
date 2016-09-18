@@ -63,7 +63,7 @@ contains
     !--------------------------------------------------------------------------------
     integer, intent(in) :: ny, nobs, neps, ns, t0
     real(wp), intent(in) :: y(:,:), TT(:,:), RR(:,:), QQ(:,:), DD(:), ZZ(:,:), HH(:,:)
-    real(wp) :: loglh
+    real(wp) :: loglh(nobs)
 
     real(wp) :: At(ns), Pt(ns,ns), RQR(ns,ns), Kt(ns,ny), QQRRp(neps,ns)
     real(wp) :: yhat(ny), nut(ny), Ft(ny,ny), iFt(ny,ny), detFt
@@ -112,7 +112,7 @@ contains
        call dsymv('u', ny, ONE, iFt, ny, nut, 1, ZERO, iFtnut, 1)
 
        if (t > t0) then
-          loglh = loglh - 0.5_wp*ny*log(2*M_PI) - 0.5_wp*log(detFt) & 
+          loglh(t) = - 0.5_wp*ny*log(2*M_PI) - 0.5_wp*log(detFt) & 
                - 0.5_wp*ddot(ny, nut, 1, iFtnut, 1)
        endif
 
@@ -147,7 +147,7 @@ contains
     !--------------------------------------------------------------------------------
     integer, intent(in) :: ny, nobs, neps, ns, t0
     real(wp), intent(in) :: y(:,:), TT(:,:), RR(:,:), QQ(:,:), DD(:), ZZ(:,:), HH(:,:)
-    real(wp) :: loglh
+    real(wp) :: loglh(nobs)
 
     real(wp) :: At(ns), Pt(ns,ns), RQR(ns,ns), QQRRp(neps,ns)
     real(wp) :: detFt
@@ -222,7 +222,7 @@ contains
           call dsymv('u', ngood, ONE, iFt, ngood, nut, 1, ZERO, iFtnut, 1)
 
           if (t > t0) then
-             loglh = loglh - 0.5_wp*ngood*log(2*M_PI) - 0.5_wp*log(detFt) & 
+             loglh(t) =  - 0.5_wp*ngood*log(2*M_PI) - 0.5_wp*log(detFt) & 
                   - 0.5_wp*ddot(ngood, nut, 1, iFtnut, 1)
           endif
 
@@ -503,7 +503,7 @@ contains
     !--------------------------------------------------------------------------------
     integer, intent(in) :: ny, nobs, neps, ns, t0
     real(wp), intent(in) :: y(:,:), TT(:,:), RR(:,:), QQ(:,:), DD(:), ZZ(:,:), HH(:,:)
-    real(wp) :: loglh
+    real(wp) :: loglh(nobs)
 
     real(wp) :: Kt(ns, ny), St(ns, ny), Mt(ny, ny), yhat(ny), nut(ny), At(ns), RQR(ns,ns)
     real(wp) :: Ft(ny, ny), iFt(ny, ny), Ft1(ny, ny), iFt1(ny, ny), MSpZp(ny, ny), P0(ns,ns)
@@ -586,8 +586,10 @@ contains
 
        call dsymv('u', ny, ONE, iFt, ny, nut, 1, ZERO, iFtnut, 1)
        if (t > t0) then
-          loglh = loglh - 0.5_wp*ny*log(2*M_PI) - 0.5_wp*log(detFt) & 
+
+          loglh(t) = - 0.5_wp*ny*log(2*M_PI) - 0.5_wp*log(detFt) & 
                - 0.5_wp*ddot(ny, nut, 1, iFtnut, 1)
+
 
        endif
 
