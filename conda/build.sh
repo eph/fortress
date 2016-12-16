@@ -1,3 +1,4 @@
+export FC=gfortran
 make clean
 make libfortress.so
 cp libfortress.so $PREFIX/lib

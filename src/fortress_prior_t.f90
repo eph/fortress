@@ -90,7 +90,7 @@ contains
 
     character(len=*), intent(in) :: frankfile
 
-
+    
     open(PRIOR_FILE_UNIT, file=frankfile)
     nlines = 0
 

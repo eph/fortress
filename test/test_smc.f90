@@ -145,12 +145,12 @@ contains
     test_smc%temp = tempering_schedule(nstages=5000, lambda=2.0_wp, max_T=80)
     test_smc%endog_tempering = .true.
 
-    call test_smc%estimate(rank)
+    !call test_smc%estimate(rank)
 
     test_smc%temp = tempering_schedule(nstages=5000, lambda=2.0_wp, max_T=80)
     test_smc%temp%phi_max = 100000000.0_wp
 
-    call test_smc%estimate(rank)
+    !call test_smc%estimate(rank)
 
   end subroutine test_smc_endog_schedule
   

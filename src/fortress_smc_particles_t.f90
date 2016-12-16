@@ -44,6 +44,7 @@ contains
     character(len=3) :: varname
 
     integer :: j
+
     call json%add(json_node, 'weights', self%weights)
     call json%add(json_node, 'loglh', self%loglh)
     call json%add(json_node, 'prior', self%prior)

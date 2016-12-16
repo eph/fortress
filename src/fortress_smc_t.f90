@@ -95,7 +95,7 @@ contains
     end do
 
     self%phi_schedule = self%phi_schedule**lambda
-    self%Z_estimates(1) = 1.0_wp
+    self%Z_estimates(:) = 1.0_wp
     self%ESS_estimates(1) = 0.0_wp !npart
     self%T_schedule = max_T
 
@@ -213,13 +213,9 @@ contains
     real(wp) :: ess_gap1, phi0
     
     scale = 0.4_wp
-    if (self%endog_tempering) self%resample_tol = 2.0_wp
+    !if (self%endog_tempering) self%resample_tol = 0.0_wp
 
-
-    self%rng = fortress_random(seed=rank)
-
-
-
+    self%rng = fortress_random(seed=self%seed+rank)
 
     ! random numbers for resampling
     if (rank == 0) uu = self%rng%uniform_rvs(self%temp%nstages, 1)
@@ -280,7 +276,7 @@ contains
           if (self%endog_tempering .eqv. .true.) then
 
              phi0 = self%temp%phi_max
-             ess_gap1 = ess_gap(phi0, phi_old, parasim, 0.5_wp)
+             ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
 
              if (ess_gap1 > 0.0_wp) then
                 phi = self%temp%phi_max
@@ -289,11 +285,11 @@ contains
                 do while (isnan(ess_gap1)) 
                    phi0 = max(phi0 / 2.0_wp, phi_old+0.01_wp)
                    if (phi0 < phi_old) stop
-                   ess_gap1 = ess_gap(phi0, phi_old, parasim, 0.5_wp)
+                   ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
                 end do
-                phi = bisection(phi_old, phi0, 0.0001_wp, phi_old, parasim, 0.5_wp)
+                phi = bisection(phi_old, phi0, 0.0001_wp, phi_old, parasim, self%resample_tol)
              end if
-             ess_gap1 = ess_gap(phi, phi_old, parasim, 0.5_wp)
+             ess_gap1 = ess_gap(phi, phi_old, parasim, self%resample_tol)
 
              self%temp%phi_schedule(i) = phi
 
@@ -315,7 +311,7 @@ contains
           ! Selection
           !------------------------------------------------------------
           !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
-          if (.true.) then !(self%temp%ESS_estimates(i) < self%npart * self%resample_tol) then
+          if (self%temp%ESS_estimates(i) < self%npart * self%resample_tol) then
 
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 

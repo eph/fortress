@@ -1,13 +1,17 @@
+#:setvar FC defined('IFORT')
+#:if FC>0
+     include 'mkl_vsl.fi'
+#:endif
 module fortress_random_t
   use, intrinsic :: iso_fortran_env, only: wp => real64
-
-
-
-#:setvar FC defined('IFORT')
-
-  #:if FC == 0
+  
+#:if FC == 0
   use randlib, only : rand_uniform, rand_normal, rand_gamma, rand_beta
-  #:endif
+
+#:else
+  use mkl_vsl
+  !use mkl_vsl_type
+#:endif
 
   implicit none
 
@@ -24,8 +28,12 @@ module fortress_random_t
 
 
 #:if FC>0
-     integer :: methodu = VSL_METHOD_DUNIFORM_STD
-     integer :: methodn = VSL_METHOD_DGAUSSIAN_BOXMULLER
+     integer :: brng = vsl_brng_mt19937
+
+     integer :: methodu = VSL_RNG_METHOD_UNIFORM_STD
+     integer :: methodn = VSL_RNG_METHOD_GAUSSIAN_BOXMULLER
+     integer :: methodg = VSL_RNG_METHOD_GAMMA_GNORM
+     integer :: methodb = VSL_RNG_METHOD_BETA_CJA
      type(vsl_stream_state) :: stream 
 #:endif
 
@@ -69,7 +77,7 @@ contains
     double precision, intent(in), optional :: mu, sig
     double precision :: rvs_mu, rvs_sig
 
-    integer :: i, j
+    integer :: i, j, errcode
 
     rvs_mu = rn%normal_mean
     rvs_sig = rn%normal_std
@@ -84,7 +92,11 @@ contains
        end do
     end do
 #:elif FC>0
-    errcode = vdrnggaussian( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_mu, rvs_sig)
+    do j = 1, dim_b
+       print*,rn%methodn, rn%methodg, dim_a, dim_b, rvs_mu, rvs_sig!, rn%stream
+       errcode = vdrnggaussian( rn%methodn, rn%stream, dim_a, rvs(:,j), rvs_mu, rvs_sig)
+       print*,'ffdsf'
+    end do
 #:endif
   end function norm_rvs
 
@@ -112,7 +124,7 @@ contains
 
     end do
 #:elif FC > 0
-    errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
+    !errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
 #:endif
   end function uniform_rvs
 
@@ -125,7 +137,7 @@ contains
     double precision, intent(in) :: theta, k
     double precision :: rvs_a, rvs_b
 
-    integer :: i, j
+    integer :: errcode, i, j
 
 
 #:if FC==0
@@ -135,9 +147,8 @@ contains
        end do
     end do
 #:elif FC > 0
-    print*,'not implemented'
-    stop
-    !errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
+    rvs = 0.0_wp
+    !errcode = vdrnggamma(rn%methodg, rn%stream, dim_a*dim_b, rvs, k, 0.0_wp, theta)
 #:endif
 
 
@@ -193,9 +204,8 @@ contains
        end do
     end do
 #:elif FC > 0
-    print*,'not implemented'
-    stop
-    !errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
+    rvs = 0.0_wp
+    !errcode = vdrngbeta(rn%methodb, rn%stream, dim_a*dim_b, rvs, a, b, 0.0_wp, 1.0_wp)
 #:endif
     
 

@@ -146,9 +146,10 @@ module fortress_bayesian_model_t
      procedure :: policy_function => policy_function_lgss
      procedure :: pdfy => pdfy_lgss
      procedure :: logpdfy_kernel => logpdfy_kernel_lgss
-     procedure :: construct_lgss_model
+     procedure :: construct_lgss_model, construct_lgss_model_noprior
      procedure(system_matrices_i), public, deferred :: system_matrices
      generic :: construct_model => construct_lgss_model
+
      procedure :: solve_serial => solve_serial_lgss
      procedure :: solve_parallel => solve_parallel_lgss
 
@@ -240,6 +241,27 @@ contains
          self%ZZ(self%nobs, self%ns), self%DD(self%nobs), self%HH(self%nobs, self%nobs))
 
   end subroutine construct_lgss_model
+
+
+  subroutine construct_lgss_model_noprior(self, name, datafile, npara, nobs, T, ns, neps)
+
+    class(fortress_lgss_model), intent(inout) :: self
+
+    character(len=144), intent(in) :: name, datafile
+    integer, intent(in) :: nobs, T, ns, neps, npara
+
+    !allocate(self%prior, source=model_prior(priorfile))
+    call self%construct_model(name, datafile, npara, nobs, T)
+    
+    self%ns = ns
+    self%neps = neps
+
+    allocate(self%TT(self%ns, self%ns), self%RR(self%ns, self%neps), self%QQ(self%neps, self%neps), &
+         self%ZZ(self%nobs, self%ns), self%DD(self%nobs), self%HH(self%nobs, self%nobs))
+
+  end subroutine construct_lgss_model_noprior
+
+
   !*******************************************************************************
   !>
   !
