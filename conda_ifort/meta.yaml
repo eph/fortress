@@ -8,33 +8,40 @@ source:
 build:
   binary_relocation: true
 
+  features:
+    - ifort
+
+script_env:
+  - LD_LIBRARY_PATH #[linux]
+    
 requirements:
   build:
+    - ifort
     - flap
     - fruit 
     - fruitpy
     - fypp
     - json-fortran
-
+    - mpich2
+    - intelpython3_core
   run:
+    - ifort
     - flap
     - fruit
     - fruitpy
-    - lapack
-    #- mpich2
-
+    - mpich2
+    - intelpython3_core
 test:
   files:
     - ../test
-
+    - ../makefile
+    - ../test_driver.f90
   source_files:
     - test
     - makefile
-    
+    - test_driver.f90
   requires:
     - fruitpy
     - fortress
-    - lapack
-    #- mpich2
+    - mpich2
     - json-fortran
-    - openblas

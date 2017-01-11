@@ -24,8 +24,6 @@ module fortress_prior_t
   end type fortress_abstract_prior
 
   interface fortress_abstract_prior
-     
-
 
      function rvs_interface(self,nsim,seed,rng) result(parasim)
        use, intrinsic :: iso_fortran_env, only: wp => real64
@@ -50,9 +48,8 @@ module fortress_prior_t
   end interface fortress_abstract_prior
 
 
-
-  integer, parameter :: PARA_BETA = 1
-  integer, parameter :: PARA_GAMMA = 2
+  integer, parameter :: PARA_GAMMA = 1
+  integer, parameter :: PARA_BETA = 2
   integer, parameter :: PARA_NORMAL = 3
   integer, parameter :: PARA_INVGAMMA = 4
   integer, parameter :: PARA_UNIFORM = 5
@@ -225,7 +222,6 @@ contains
     end if
 
     do i = 1, self%npara
-
        if (self%pfix(i) == 1) then
           parasim(i,:) = self%pfix(i)
        else

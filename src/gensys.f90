@@ -112,6 +112,12 @@ contains
     CC = 0.0_wp
     RR = 0.0_wp
 
+
+    ! call write_array_to_file('GAM0.txt', G0)
+    ! call write_array_to_file('GAM1.txt', G1)
+    ! call write_array_to_file('PPI.txt', PI)
+    ! call write_array_to_file('PSI.txt', PSI)
+
  
 
     !--------------------------------------------------
@@ -160,35 +166,28 @@ contains
 
     allocate(Qstab(nstab, n), Qunstab(nunstab, n))
 
+!    print*,'nstab = ', nstab
     Qstab = Q(1:nstab, :)
     Qunstab = Q(nstab+1:n,:)
 
  
 
     ! etawt = Q2*PI
-
     allocate(etawt(nunstab, pin))
-
-    ! if (nunstab==11) then
-    !    eu = 5
-    !    call write_array_to_file('badGAM0.txt', G0)
-    !    return 
-    ! end if
  
 
     call zgemm('n','n', nunstab, pin, n, CPLX_ONE, Qunstab, nunstab, &
-
          cPI, n, CPLX_ZERO, etawt, nunstab)
 
     lmin = min(nunstab, pin)
-    print*,'lmin', lmin
+!    print*,'lmin', lmin
 
 
     allocate(eta_u(nunstab, lmin), eta_s(lmin), eta_v(lmin, pin))
 
     call zsvd(etawt, eta_u, eta_s, eta_v, nunstab, pin, lmin)
 
-    print*,nunstab,size(eta_s,1)
+!    print*,nunstab,size(eta_s,1)
     do i = 1,size(eta_s,1)
        if (eta_s(i) > verysmall) nbigev = nbigev + 1
      end do
@@ -196,7 +195,7 @@ contains
  
 
     if (nbigev >= nunstab) eu(1) = 1
-    print*,'eu(1) = ', eu(1)
+    !print*,'eu(1) = ', eu(1)
  
 
    ! zwt
@@ -213,7 +212,7 @@ contains
     do i = 1, ldzt
         if (abs(zwt_s(i)) > verysmall) nbigev = nbigev + 1
     end do
-    print*,'bigev', nbigev
+ !   print*,'bigev', nbigev
     ! Check for uniques
     if (size(zwt_v)==0) then
 
@@ -231,11 +230,11 @@ contains
 
        ! this needs to be put into LAPACK
        ! print*,'--------'
-       print*,shape(eta_v), shape(transpose(conjg(eta_v))), shape(zwt_v)
+!       print*,'veta1=',shape(zwt_v),'veta=',shape(eta_v)
 
-       vv2 = zwt_v - matmul(matmul(eta_v,transpose(conjg(eta_v))),zwt_v);
+       vv2 = zwt_v - matmul(matmul(transpose(conjg(eta_v)),eta_v),zwt_v);
        !print*,'1'
-       !call compute_norm(matmul(transpose(vv2), vv2), norm, size(vv2, 2), size(vv2, 2))
+       call compute_norm(matmul(transpose(vv2), vv2), norm, size(vv2, 2), size(vv2, 2))
        !print*,'2'
        !print*,norm,'fdsafa'
        unique = norm < n*verysmall;
@@ -251,7 +250,7 @@ contains
 
     else
 
-       print*,'Indeterminancy'
+       !print*,'Indeterminancy'
 
        eu(2) = 0
 
@@ -313,7 +312,7 @@ contains
     cG0 = dcmplx(0.0_wp,0.0_wp)
 
     cG0(1:(n-nunstab),:) = matmul(tmat,AA)
-    !print*,'3'
+
     do i = n-nunstab+1,n
 
        cG0(i,i) = dcmplx(1.0_wp, 0.0_wp)

@@ -58,12 +58,20 @@ contains
 
     integer, intent(in), optional :: seed
 
-    integer :: errcode
+    integer :: errcode, n, i
+    integer, allocatable :: nseed(:) 
 
     if (present(seed)) rn%seed = seed
 
 #:if FC > 0
     errcode = vslnewstream(rn%stream, rn%brng, rn%seed)
+#:else
+    call random_seed(size=n)
+    allocate(nseed(n))
+    nseed = rn%seed + 37 * (/ (i - 1, i = 1, n) /)
+    call random_seed(put=nseed)
+    deallocate(nseed)
+    print*,'SEED = ', nseed
 #:endif
 
   end function new_fortress_random
@@ -95,7 +103,6 @@ contains
     do j = 1, dim_b
        print*,rn%methodn, rn%methodg, dim_a, dim_b, rvs_mu, rvs_sig!, rn%stream
        errcode = vdrnggaussian( rn%methodn, rn%stream, dim_a, rvs(:,j), rvs_mu, rvs_sig)
-       print*,'ffdsf'
     end do
 #:endif
   end function norm_rvs
@@ -139,11 +146,10 @@ contains
 
     integer :: errcode, i, j
 
-
 #:if FC==0
     do j = 1, dim_b
        do i = 1, dim_a
-          rvs(i,j) = rand_gamma(theta,k)
+          rvs(i,j) = rand_gamma(k,theta)
        end do
     end do
 #:elif FC > 0

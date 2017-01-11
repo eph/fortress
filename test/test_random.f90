@@ -30,6 +30,11 @@ contains
     call assert_equals(0.5_wp, sum(y)/100000, 0.005_wp)
     call assert_equals( 4.0_wp/(16.0_wp*5.0_wp), sum( (y - 0.5_wp)**2 )/100000, 0.002_wp)
     
+    y = rn%beta_rvs(100000, 1, a=2.625_wp, b=2.625_wp)
+    call assert_equals(0.5_wp, sum(y)/100000, 0.005_wp)
+    call assert_equals( 0.04_wp, sum( (y - 0.5_wp)**2 )/100000, 0.002_wp)
+
+
   end subroutine test_random_init
 
 end module test_random

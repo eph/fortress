@@ -4,12 +4,10 @@ VPATH=.:$(SRC):$(TEST):templates
 
 LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o fortress_model_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_t.o gensys.o
 
-#LIBOBJS=fortress_prior_t.o fortress_model_t.o fortress_info.o randlib.o 
 
 FC = gfortran
-
 ifeq ($(FC), gfortran)
-	FC=mpif90 -f90=gfortran -O3 #-Wall -fcheck=all -g -fbacktrace
+	FC=mpif90 -f90=gfortran -O3 #-Wall -fcheck=all -g -fbacktrace #03
 	FCDEC=-DGFORTRAN
 endif
 
@@ -31,7 +29,6 @@ FPP=fypp
 FRUIT= -I$(INC)/fruit -L$(LIB) -lfruit
 FLAP= -I$(INC)/flap -L$(LIB) -lflap
 FORTRESS=-I/home/eherbst/Dropbox/code/fortress -L/home/eherbst/Dropbox/code/fortress -lfortress
-FORTRESS= -I$(INC)/fortress -L$(LIB) -lfortress
 JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
 
@@ -40,7 +37,7 @@ JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 %.o : %.f90
 	$(FPP) $(FCDEC) $< $(notdir $(basename $<))_tmp.f90
 	$(FC) $(FRUIT) $(JSON) -fPIC -c $(notdir $(basename $<)_tmp.f90) $(FLAP) -o $(notdir $(basename $<)).o
-#rm $(notdir $(basename $<))_tmp.f90
+	rm $(notdir $(basename $<))_tmp.f90
 
 test_%.o : test_%.f90
 	$(FPP) $(FCDEC) $< $(notdir $(basename $<))_tmp.f90
@@ -49,9 +46,7 @@ test_%.o : test_%.f90
 
 
 test_driver: test_driver.f90 $(LOBJS) test_model_t.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o test_gensys.o
-	@echo $(FORTRESS)
-	@echo $(FC)
-	$(FC) $(FORTRESS) $(FLAP) $(FRUIT) $(JSON)  $^ -o $@ -llapack
+	$(FC) $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack 
 
 libfortress.so: fortress.f90  $(LIBOBJS) 
 	$(FC) -shared -o $@  $^ 
@@ -59,8 +54,8 @@ libfortress.so: fortress.f90  $(LIBOBJS)
 # test_model_t.o : test_model_t.f90 libfortress.so 
 # 	$(FC) -c test/test_model_t.f90 -L. -lfortress -o test_model_t.o
 
-# test_smc: smc_driver_mpi.f90 test_model_t. libfortress.so
-# 	$(FC)  templates/smc_driver_mpi.f90 -L. test/test_model_t.f90 -lfortress $(FLAP) -llapack -o test_smc
+test_smc: smc_driver_mpi.f90 test_model_t.o libfortress.so
+	$(FC)  templates/smc_driver_mpi.f90 -L. test/test_model_t.f90 -lfortress $(FLAP) -llapack -o test_smc
 
 
 

@@ -53,7 +53,6 @@ CONTAINS
   RECURSIVE FUNCTION rand_gamma(shape, SCALE) RESULT(ans)
     DOUBLE PRECISION SHAPE,scale,u,w,d,c,x,xsq,g
     IF (shape <= 0.0d0) THEN
-
        WRITE(*,*) "Shape PARAMETER must be positive"
     END IF
     IF (scale <= 0.0d0) THEN
