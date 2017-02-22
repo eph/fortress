@@ -100,10 +100,9 @@ contains
        end do
     end do
 #:elif FC>0
-    do j = 1, dim_b
-       print*,rn%methodn, rn%methodg, dim_a, dim_b, rvs_mu, rvs_sig!, rn%stream
-       errcode = vdrnggaussian( rn%methodn, rn%stream, dim_a, rvs(:,j), rvs_mu, rvs_sig)
-    end do
+       !print*,rn%methodn, rn%methodg, dim_a, dim_b, rvs_mu, rvs_sig!, rn%stream
+       errcode = vdrnggaussian( rn%methodn, rn%stream, dim_b*dim_a, rvs, rvs_mu, rvs_sig)
+
 #:endif
   end function norm_rvs
 
@@ -131,7 +130,7 @@ contains
 
     end do
 #:elif FC > 0
-    !errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
+    errcode = vdrnguniform( rn%methodn, rn%stream, dim_a*dim_b, rvs, rvs_lb, rvs_ub)
 #:endif
   end function uniform_rvs
 
@@ -154,7 +153,7 @@ contains
     end do
 #:elif FC > 0
     rvs = 0.0_wp
-    !errcode = vdrnggamma(rn%methodg, rn%stream, dim_a*dim_b, rvs, k, 0.0_wp, theta)
+    errcode = vdrnggamma(rn%methodg, rn%stream, dim_a*dim_b, rvs, k, 0.0_wp, theta)
 #:endif
 
 
@@ -211,7 +210,7 @@ contains
     end do
 #:elif FC > 0
     rvs = 0.0_wp
-    !errcode = vdrngbeta(rn%methodb, rn%stream, dim_a*dim_b, rvs, a, b, 0.0_wp, 1.0_wp)
+    errcode = vdrngbeta(rn%methodb, rn%stream, dim_a*dim_b, rvs, rvs_a, rvs_b, 0.0_wp, 1.0_wp)
 #:endif
     
 
