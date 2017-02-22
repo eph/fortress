@@ -146,7 +146,8 @@ module fortress_bayesian_model_t
      procedure :: policy_function => policy_function_lgss
      procedure :: pdfy => pdfy_lgss
      procedure :: logpdfy_kernel => logpdfy_kernel_lgss
-     procedure :: construct_lgss_model, construct_lgss_model_noprior
+     procedure :: construct_lgss_model
+     procedure :: construct_lgss_model_noprior
      procedure(system_matrices_i), public, deferred :: system_matrices
      generic :: construct_model => construct_lgss_model
 
