@@ -5,14 +5,14 @@ VPATH=.:$(SRC):$(TEST):templates
 LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o fortress_model_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_t.o gensys.o
 
 
-FC = gfortran
+FC = ifort
 ifeq ($(FC), gfortran)
 	FC=mpif90 -f90=gfortran -O3 #-Wall -fcheck=all -g -fbacktrace #03
 	FCDEC=-DGFORTRAN
 endif
 
 ifeq ($(FC), ifort)
-	FC=mpif90 -f90=ifort -mkl -I/opt/intel/mkl/include 
+	FC=mpif90 -mkl -openmp -O3 -nocheck -inline-level=2 -shared-intel -mcmodel=medium -xSSE4.2 -ipo
 	FCDEC=-DIFORT 
 endif
 
@@ -20,8 +20,8 @@ ifdef CONDA_BUILD
 LIB=$(PREFIX)/lib
 INC=$(PREFIX)/include
 else
-LIB=$(HOME)/anaconda3/lib
-INC=$(HOME)/anaconda3/include
+LIB=$(HOME)/miniconda2/envs/ifort/lib
+INC=$(HOME)/miniconda2/envs/ifort/include
 endif
 
 #use export LD_LIBRARY_PATH=.
