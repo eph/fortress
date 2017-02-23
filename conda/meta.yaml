@@ -22,6 +22,7 @@ requirements:
     - fruitpy
     - lapack
     #- mpich2
+    - tqdm
 
 test:
   files:

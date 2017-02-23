@@ -1,4 +1,4 @@
-import fortress
+from fortress import SMCDriver
 
 from FRUIT import *
 test_modules = ['test/test_random.f90',
