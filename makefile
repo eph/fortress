@@ -5,16 +5,18 @@ VPATH=.:$(SRC):$(TEST):templates
 LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o fortress_model_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_t.o gensys.o
 
 
-FC = ifort
+#FC = ifort
+ifeq ($(FC), ifort)
+	FC=mpif90 -mkl -openmp -O3 -nocheck -inline-level=2 -shared-intel -mcmodel=medium -xSSE4.2 -ipo
+	FCDEC=-DIFORT 
+endif
+
 ifeq ($(FC), gfortran)
 	FC=mpif90 -f90=gfortran -O3 #-Wall -fcheck=all -g -fbacktrace #03
 	FCDEC=-DGFORTRAN
 endif
 
-ifeq ($(FC), ifort)
-	FC=mpif90 -mkl -openmp -O3 -nocheck -inline-level=2 -shared-intel -mcmodel=medium -xSSE4.2 -ipo
-	FCDEC=-DIFORT 
-endif
+
 
 ifdef CONDA_BUILD
 LIB=$(PREFIX)/lib
@@ -26,9 +28,9 @@ endif
 
 #use export LD_LIBRARY_PATH=.
 FPP=fypp
-FRUIT= -I$(INC)/fruit -L$(LIB) -lfruit
-FLAP= -I$(INC)/flap -L$(LIB) -lflap
-FORTRESS=-I/home/eherbst/Dropbox/code/fortress -L/home/eherbst/Dropbox/code/fortress -lfortress
+FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
+FLAP=-I$(INC)/flap -L$(LIB) -lflap
+FORTRESS=-I$(INC)/fortress -L$(LIB) -lfortress
 JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
 
@@ -56,9 +58,6 @@ libfortress.so: fortress.f90  $(LIBOBJS)
 
 test_smc: smc_driver_mpi.f90 test_model_t.o libfortress.so
 	$(FC)  templates/smc_driver_mpi.f90 -L. test/test_model_t.f90 -lfortress $(FLAP) -llapack -o test_smc
-
-
-
 
 test:
 	python conda/run_test.py

@@ -143,9 +143,9 @@ contains
     open(143,file=filename,action='write')
     do i = 1, rows
        if (transpose_t) then
-          write(143,'(1000f)') array(:,i)
+          write(143,'(1000f16.8)') array(:,i)
        else
-          write(143,'(1000f)') array(i,:)
+          write(143,'(1000f16.8)') array(i,:)
        end if
     end do
     close(143)

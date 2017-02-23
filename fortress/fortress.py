@@ -2,8 +2,9 @@ import os
 import subprocess
 import json
 import tqdm
+
 my_env = os.environ.copy()
-my_env['LD_LIBRARY_PATH']='/home/eherbst/Dropbox/code/fortress'
+#my_env['LD_LIBRARY_PATH']='/home/eherbst/Dropbox/code/fortress'
 
 class SMCDriver(object):
 
