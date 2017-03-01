@@ -8,10 +8,12 @@ module fortress_smc_t
   use fortress_smc_particles_t, only: fortress_smc_particles
   use fortress_random_t, only: fortress_random
   use fortress_linalg, only: cholesky, inverse
+  use fortress_util, only: read_array_from_file
 
   use json_module, only: json_core, json_value
   use fortress_info
 
+  !use mpi
 
   implicit none
 
@@ -53,7 +55,7 @@ module fortress_smc_t
      real(wp) :: initial_c, mix_alpha
      logical :: mcmc_mix, conditional_covariance
      integer :: seed
-     character(len=200) :: output_dir
+     character(len=200) :: output_dir, init_file
 
      integer :: nproc
      integer :: ngap 
@@ -145,6 +147,7 @@ contains
     call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
+    call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
 
     print*,'Initializing SMC for model: ', smc%model%name
     print*, smc%npart, smc%nphi
@@ -195,7 +198,7 @@ contains
     real(wp) :: phi, phi_old
     integer :: previous_T, current_T
 
-    real(wp) :: mean(self%model%npara), variance(self%model%npara, self%model%npara)
+    real(wp) :: mean(self%model%npara), variance(self%model%npara, self%model%npara), chol_var(self%model%npara, self%model%npara)
 
     real(wp) :: p0(self%model%npara), loglh0, loglhold0, prior0
     real(wp) :: likdiff, likdiffold, prdiff, alp
@@ -224,8 +227,12 @@ contains
     parasim = fortress_smc_particles(nvars=self%model%npara, npart=self%npart)
     if (rank == 0) then
 
-       parasim%particles = self%model%prior%rvs(self%npart, rng=self%rng)
-
+       if (self%init_file == 'none') then
+          parasim%particles = self%model%prior%rvs(self%npart, rng=self%rng)
+       else
+          call read_array_from_file(self%init_file, parasim%particles)
+          print*,'Reading particles from', self%init_file
+       end if
        call json%create_object(json_p,'')
        call json%add(json_p, 'model_name', self%model%name)
        call json%add(json_p, 'nproc', self%nproc)
@@ -241,9 +248,6 @@ contains
 
     call scatter_particles(parasim, nodepara)
     call parasim%mean_and_variance(mean, variance)
-    do i = 1, self%model%npara
-       print*,mean(i), sqrt(variance(i,i))
-    end do
     call self%draw_from_prior(nodepara, self%temp%T_schedule(1))
     call gather_particles(parasim, nodepara)
 
@@ -350,6 +354,40 @@ contains
        !------------------------------------------------------------
        ! mutation
        !------------------------------------------------------------
+       chol_var = 0.0_wp
+       do bj = 1, self%nblocks
+          bsize = break_points(bj+1) - break_points(bj)
+          allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
+          b_ind = ind(break_points(bj)+1:break_points(bj+1))
+
+                
+          block_variance_chol = variance(b_ind, b_ind)
+          if (self%conditional_covariance .and. (self%nblocks>1)) then
+
+             rest_ind = pack([ (jj, jj = 1,self%model%npara )], &
+                  [( (any(b_ind(:) == jj)), jj = 1,self%model%npara)].eqv..false.)
+             restsize = self%model%npara-bsize
+             allocate(other_var(restsize,restsize), &
+                  temp(bsize,restsize))
+
+             other_var = variance(rest_ind, rest_ind)
+             call inverse(other_var, info)
+
+             call dgemm('n','n',bsize,restsize,restsize,1.0_wp, variance(b_ind, rest_ind), bsize, &
+                  other_var, restsize, 0.0_wp, temp, bsize)
+             call dgemm('n','n',bsize,bsize,restsize, -1.0_wp, temp, bsize, &
+                  variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
+
+             deallocate(other_var, temp)
+          end if
+
+          call cholesky(block_variance_chol, info)
+
+          chol_var(b_ind, b_ind) = block_variance_chol
+          deallocate(b_ind, block_variance_chol)
+       end do
+
+
        nodeuind = 1
        nodeacpt = 0
        do j = 1, self%ngap
@@ -362,27 +400,28 @@ contains
                 allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
                 b_ind = ind(break_points(bj)+1:break_points(bj+1))
 
-                
-                block_variance_chol = variance(b_ind, b_ind)
-                if (self%conditional_covariance .and. (self%nblocks>1)) then
 
-                   rest_ind = pack([ (jj, jj = 1,self%model%npara )], &
-                        [( (any(b_ind(:) == jj)), jj = 1,self%model%npara)].eqv..false.)
-                   restsize = self%model%npara-bsize
-                   allocate(other_var(restsize,restsize), &
-                        temp(bsize,restsize))
+                block_variance_chol = chol_var(b_ind, b_ind)
+                ! block_variance_chol = variance(b_ind, b_ind)
+                ! if (self%conditional_covariance .and. (self%nblocks>1)) then
 
-                   other_var = variance(rest_ind, rest_ind)
-                   call inverse(other_var, info)
+                !    rest_ind = pack([ (jj, jj = 1,self%model%npara )], &
+                !         [( (any(b_ind(:) == jj)), jj = 1,self%model%npara)].eqv..false.)
+                !    restsize = self%model%npara-bsize
+                !    allocate(other_var(restsize,restsize), &
+                !         temp(bsize,restsize))
 
-                   call dgemm('n','n',bsize,restsize,restsize,1.0_wp, variance(b_ind, rest_ind), bsize, &
-                        other_var, restsize, 0.0_wp, temp, bsize)
-                   call dgemm('n','n',bsize,bsize,restsize, -1.0_wp, temp, bsize, &
-                        variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
+                !    other_var = variance(rest_ind, rest_ind)
+                !    call inverse(other_var, info)
 
-                end if
+                !    call dgemm('n','n',bsize,restsize,restsize,1.0_wp, variance(b_ind, rest_ind), bsize, &
+                !         other_var, restsize, 0.0_wp, temp, bsize)
+                !    call dgemm('n','n',bsize,bsize,restsize, -1.0_wp, temp, bsize, &
+                !         variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
 
-                call cholesky(block_variance_chol, info)
+                ! end if
+
+                ! call cholesky(block_variance_chol, info)
 
                 p0 = nodepara%particles(:,j)
                 p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
@@ -540,6 +579,10 @@ contains
     call cli%add(switch='--resample-tol', switch_ab='-rt', &
          required=.false.,act='store',def='0.5',error=error, &
          help='Tolerance for resampling.')
+    call cli%add(switch='--initial-particles', switch_ab='-pf', &
+         required=.false.,act='store',def='none',error=error, &
+         help='file with draws from prior')
+
 
   end function initialize_cli
 
@@ -600,6 +643,10 @@ contains
        if (isnan(lik0)) lik0 = -10.0_wp**11
 
 
+       if ((lik0 < -10.0_wp**9) .and. (self%init_file /= 'none')) then
+          print*,'Error with initial particle files'
+          stop
+       end if
 
        do while (lik0 < -10.0_wp**9)
           p0 = paraextra(:,j)
