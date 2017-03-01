@@ -1,6 +1,6 @@
 package:
   name: fortress
-  version: 0.0.0
+  version: 0.1.0
 
 source:
   path: ..
@@ -16,6 +16,7 @@ requirements:
     - fypp
     - json-fortran
     - numpy 
+
   run:
     - flap
     - fruit

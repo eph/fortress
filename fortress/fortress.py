@@ -42,15 +42,15 @@ class SMCDriver(object):
 
 
 makefile = """
-LIB=$(HOME)/anaconda3/lib
-INC=$(HOME)/anaconda3/include
+LIB={lib_path}
+INC={inc_path}
 FPP=fypp
-FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit
+FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
 FLAP=-I$(INC)/flap -L$(LIB) -lflap
-FORTRESS=-I/home/eherbst/Dropbox/code/fortress -L/home/eherbst/Dropbox/code/fortress -lfortress
+FORTRESS=-I$(INC)/fortress -L$(LIB)/fortress -lfortress
 JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
-FC=mpif90 -O3 #-Wall -fcheck=all -g -fbacktrace
+FC={f90} -O3 #-Wall -fcheck=all -g -fbacktrace
 
 smc_driver : smc_driver.f90 {model_file}
 \t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -llapack -lblas -Wl,--end-group -o smc 
@@ -82,7 +82,9 @@ driverfile ="""program smc_driver
   call mpi_finalize(mpierror)
 end program smc_driver"""
 
-def make_smc(model_file, output_directory='_fortress_tmp', other_files=None):
+def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
+             lib_path='$(HOME)/anaconda3/lib',inc_path='$(HOME)/anaconda3/include',
+             f90='mpif90'):
     """
     Makes an smc driver.
     """
@@ -96,7 +98,7 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None):
         f.write(model_file.format(output_directory=os.path.abspath(output_directory)))
 
     with open(os.path.join(tmp_dir, 'makefile'), 'w') as f:
-        f.write(makefile.format(model_file='model_t.f90'))
+        f.write(makefile.format(model_file='model_t.f90',lib_path=lib_path,inc_path=inc_path,f90=f90))
 
     with open(os.path.join(tmp_dir, 'smc_driver.f90'), 'w') as f:
         f.write(driverfile)

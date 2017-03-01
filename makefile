@@ -1,6 +1,6 @@
 SRC=src
 TEST=test
-VPATH=.:$(SRC):$(TEST):templates
+VPATH=.:$(SRC):$(TEST):$(SRC)/external
 
 LIBOBJS=fortress_info.o fortress_util.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o fortress_linalg.o filter.o fortress_model_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_t.o gensys.o
 
@@ -12,7 +12,7 @@ ifeq ($(FC), ifort)
 endif
 
 ifeq ($(FC), gfortran)
-	FC=mpif90 -f90=gfortran -O3 #-Wall -fcheck=all -g -fbacktrace #03
+	FC=mpif90 -f90=gfortran -O3 -ffast-math -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace #03
 	FCDEC=-DGFORTRAN
 endif
 

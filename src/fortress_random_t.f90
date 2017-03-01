@@ -70,8 +70,8 @@ contains
     allocate(nseed(n))
     nseed = rn%seed + 37 * (/ (i - 1, i = 1, n) /)
     call random_seed(put=nseed)
-    deallocate(nseed)
     print*,'SEED = ', nseed
+    deallocate(nseed)
 #:endif
 
   end function new_fortress_random
