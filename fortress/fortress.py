@@ -1,9 +1,11 @@
+import numpy as np
 import os
 import subprocess
 import json
 import tqdm
-
+import pandas as p
 my_env = os.environ.copy()
+my_env['OPENBLAS_NUM_THREADS'] = '1'
 #my_env['LD_LIBRARY_PATH']='/home/eherbst/Dropbox/code/fortress'
 
 class SMCDriver(object):
@@ -19,7 +21,9 @@ class SMCDriver(object):
 
     def run(self, **kwargs): 
         nproc = kwargs.pop('nproc',1)
+        envs = kwargs.pop('env', {})
 
+        my_env.update(envs)
 
         mpi = 'mpirun -n {} '.format(nproc)
         args = sum([['--'+k.replace('_','-'),str(v)] for k,v in kwargs.items()], [])
@@ -30,11 +34,14 @@ class SMCDriver(object):
                                 stderr=subprocess.PIPE, universal_newlines=True) 
 
         pbar = tqdm.tqdm(total=1.0)
+        i = 0
         for line in iter(proc.stdout.readline, ''):
             line2 = line.strip()
             if line2.startswith('iteration'):
                 lab, it, of, tot = line2.split()
                 pbar.update(1/float(tot))
+                i = i + 1
+
         pbar.close()
 
         return json.loads(open('output.json').read())
@@ -53,7 +60,7 @@ JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 FC={f90} -O3 #-Wall -fcheck=all -g -fbacktrace
 
 smc_driver : smc_driver.f90 {model_file}
-\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -llapack -lblas -Wl,--end-group -o smc 
+\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o smc 
 """
 
 import os
@@ -84,7 +91,7 @@ end program smc_driver"""
 
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
              lib_path='$(HOME)/anaconda3/lib',inc_path='$(HOME)/anaconda3/include',
-             f90='mpif90'):
+             f90='mpif90', lapack='openblas'):
     """
     Makes an smc driver.
     """
@@ -95,10 +102,17 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
         print('Directory exists!')
         
     with open(os.path.join(tmp_dir, 'model_t.f90'), 'w') as f:
-        f.write(model_file.format(output_directory=os.path.abspath(output_directory)))
+        modelfile = model_file.format(output_directory=os.path.abspath(output_directory))
+        for name, contents in other_files.items():
+            basename = os.path.basename(name)
+            outname = os.path.join(os.path.abspath(tmp_dir), basename)
+            print('Replacing {} with {}'.format(basename, outname))
+            modelfile = modelfile.replace(basename, outname)
+
+        f.write(modelfile)
 
     with open(os.path.join(tmp_dir, 'makefile'), 'w') as f:
-        f.write(makefile.format(model_file='model_t.f90',lib_path=lib_path,inc_path=inc_path,f90=f90))
+        f.write(makefile.format(model_file='model_t.f90',lib_path=lib_path,inc_path=inc_path,f90=f90,lapack=lapack))
 
     with open(os.path.join(tmp_dir, 'smc_driver.f90'), 'w') as f:
         f.write(driverfile)
@@ -107,17 +121,19 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
         
         if isinstance(other_files, list):
             other_files = {f:f for f in other_files}
-        print(other_files)
+
         for name, contents in other_files.items():
 
             basename = os.path.basename(name)
 
             outname = os.path.join(tmp_dir, basename)
-            if os.path.isfile(contents):
+            if isinstance(contents, (np.ndarray, p.DataFrame)):
+                np.savetxt(outname, contents)
+            elif os.path.isfile(contents):
                 from shutil import copyfile
                 copyfile(contents, outname)
             else:
-                with open(basename, 'w') as f:
+                with open(outname, 'w') as f:
                     f.write(contents)
 
 

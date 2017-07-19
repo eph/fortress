@@ -1,7 +1,7 @@
 module fortress_smc_t
   use, intrinsic :: iso_fortran_env, only: wp => real64, &
        stdout => output_unit, stderr => error_unit
-  
+
 
   use flap, only : command_line_interface
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
@@ -30,10 +30,10 @@ module fortress_smc_t
      integer, allocatable :: T_schedule(:)
 
      real(wp) :: phi_max
-     
+
      contains
        procedure :: write_json
-     
+
   end type tempering_schedule
 
   interface tempering_schedule
@@ -58,7 +58,7 @@ module fortress_smc_t
      character(len=200) :: output_dir, init_file
 
      integer :: nproc
-     integer :: ngap 
+     integer :: ngap
 
 
      type(fortress_random) :: rng
@@ -84,12 +84,12 @@ contains
     integer, intent(in) :: nstages, max_T
     real(wp), intent(in) :: lambda
 
-    integer :: i 
+    integer :: i
 
 
     self%nstages = nstages
     self%phi_max = 1.0_wp
-    
+
     allocate(self%phi_schedule(nstages), self%T_schedule(nstages), &
          self%Z_estimates(nstages), self%ESS_estimates(nstages))
     do i = 1, self%nstages
@@ -97,6 +97,7 @@ contains
     end do
 
     self%phi_schedule = self%phi_schedule**lambda
+    self%phi_schedule(nstages) = self%phi_max
     self%Z_estimates(:) = 1.0_wp
     self%ESS_estimates(1) = 0.0_wp !npart
     self%T_schedule = max_T
@@ -124,7 +125,7 @@ contains
 
     integer :: nproc
 
-    integer :: rank 
+    integer :: rank
     integer :: err
     allocate(smc%model, source=model_p)
 
@@ -162,7 +163,7 @@ contains
 
     smc%temp = tempering_schedule(smc%nphi, smc%lambda, smc%model%T)
     smc%nphi = smc%temp%nstages
-    
+
   end function new_smc
 
   subroutine estimate(self, rank)
@@ -214,7 +215,7 @@ contains
     real(wp) :: scale, ahat
 
     real(wp) :: ess_gap1, phi0
-    
+
     scale = 0.4_wp
     !if (self%endog_tempering) self%resample_tol = 0.0_wp
 
@@ -223,7 +224,7 @@ contains
     ! random numbers for resampling
     if (rank == 0) uu = self%rng%uniform_rvs(self%temp%nstages, 1)
 
-    ! draw from the prior 
+    ! draw from the prior
     parasim = fortress_smc_particles(nvars=self%model%npara, npart=self%npart)
     if (rank == 0) then
 
@@ -251,15 +252,15 @@ contains
     call self%draw_from_prior(nodepara, self%temp%T_schedule(1))
     call gather_particles(parasim, nodepara)
 
-    i = 2 
+    i = 2
     do while (i <= self%temp%nstages)
     !do i = 2, self%temp%nstages
        previous_T = self%temp%T_schedule(i-1)
        current_T = self%temp%T_schedule(i)
-       
+
        phi = self%temp%phi_schedule(i)
        phi_old = self%temp%phi_schedule(i-1)
-       
+
        add_new_observation = abs(previous_T - current_T) > 0
 
        if (add_new_observation) then
@@ -286,7 +287,7 @@ contains
                 phi = self%temp%phi_max
                 if (current_T == self%model%T) self%temp%nstages = i
              else
-                do while (isnan(ess_gap1)) 
+                do while (isnan(ess_gap1))
                    phi0 = max(phi0 / 2.0_wp, phi_old+0.01_wp)
                    if (phi0 < phi_old) stop
                    ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
@@ -360,7 +361,7 @@ contains
           allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
           b_ind = ind(break_points(bj)+1:break_points(bj+1))
 
-                
+
           block_variance_chol = variance(b_ind, b_ind)
           if (self%conditional_covariance .and. (self%nblocks>1)) then
 
@@ -374,8 +375,9 @@ contains
              call inverse(other_var, info)
 
              call dgemm('n','n',bsize,restsize,restsize,1.0_wp, variance(b_ind, rest_ind), bsize, &
-                  other_var, restsize, 0.0_wp, temp, bsize)
-             call dgemm('n','n',bsize,bsize,restsize, -1.0_wp, temp, bsize, &
+                   other_var, restsize, 0.0_wp, temp, bsize)
+
+             call dgemm('n','n',bsize,bsize, restsize, -1.0_wp, temp, bsize, &
                   variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
 
              deallocate(other_var, temp)
@@ -392,14 +394,13 @@ contains
        nodeacpt = 0
        do j = 1, self%ngap
 
-          do m = 1, self%nintmh 
+          do m = 1, self%nintmh
 
              npara_old = 0
              do bj = 1, self%nblocks
                 bsize = break_points(bj+1) - break_points(bj)
                 allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
                 b_ind = ind(break_points(bj)+1:break_points(bj+1))
-
 
                 block_variance_chol = chol_var(b_ind, b_ind)
                 ! block_variance_chol = variance(b_ind, b_ind)
@@ -426,7 +427,7 @@ contains
                 p0 = nodepara%particles(:,j)
                 p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
                 loglh0 = self%model%lik(p0, T=current_T)
-                if ( nodepara%loglhold(j) > 0.0_wp) then
+                if ( nodepara%loglhold(j) /= 0.0_wp) then
                    loglhold0 = self%model%lik(p0, T=previous_T)
                 else
                    loglhold0 = 0.0_wp
@@ -434,8 +435,8 @@ contains
                 prior0 = self%model%prior%logpdf(p0)
 
                 likdiff = loglh0 - nodepara%loglh(j)
-                likdiffold = loglhold0 - nodepara%loglhold(j) 
-                prdiff = prior0 - nodepara%prior(j) 
+                likdiffold = loglhold0 - nodepara%loglhold(j)
+                prdiff = prior0 - nodepara%prior(j)
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
                 if (nodeu(nodeuind,1) < alp) then
@@ -448,7 +449,6 @@ contains
 
                 deallocate(b_ind, block_variance_chol)
 
-                if (self%conditional_covariance) deallocate(rest_ind,other_var,temp)
                 npara_old = npara_old + bsize
              end do
              nodeuind = nodeuind + 1
@@ -586,7 +586,7 @@ contains
 
   end function initialize_cli
 
-  
+
   subroutine evaluate_time_t_lik(self, smc_particles, likT)
 
     class(fortress_smc) :: self
@@ -652,7 +652,7 @@ contains
           p0 = paraextra(:,j)
           lik0 = self%model%lik(p0, T=likT)
           if (isnan(lik0)) lik0 = -10000000000000.0_wp
-          
+
           j = j + 1
           if (j > 1000) then
              write(stderr, *) 'Prior is too far from likelihood ... '
@@ -716,7 +716,7 @@ contains
     end if
 
     call rperm3(npara, ind2, u)
-    
+
     indices(ind2) = indices
 
     gap = int(1.0_wp*npara / nblocks)
@@ -752,7 +752,7 @@ contains
     max2 = maxval(new_weight2)
 
     a1 = sum(exp(new_weight2-max2)) * parasim%npart
-    a2 = sum(exp(new_weight-max1))**2 
+    a2 = sum(exp(new_weight-max1))**2
 
     f = exp(max2-2.0_wp*max1)*a2/a1  - r
 
@@ -760,15 +760,15 @@ contains
 
 
     double precision function bisection(lb1, ub1, tol, phi_old, parasim, rstar)
- 
+
       double precision, intent(in) :: lb1, ub1, tol, phi_old, rstar
       type(fortress_smc_particles) :: parasim
 
       logical :: bisection_converged
       integer :: bisection_loops
-     
+
       double precision :: x1, essx, lb, ub
- 
+
       lb = lb1
       ub = ub1
       x1 = (lb+ub)/2
@@ -776,30 +776,27 @@ contains
       bisection_converged = abs(essx) < tol
       bisection_loops = 1
       do while (.not. bisection_converged)
- 
-         if (essx < 0.0) then       
-            ub = x1                 
-            x1 = (x1 + lb) / 2.0d0  
-         else                       
-            lb = x1                 
-            x1 = (x1 + ub) / 2.0d0  
+
+         if (essx < 0.0) then
+            ub = x1
+            x1 = (x1 + lb) / 2.0d0
+         else
+            lb = x1
+            x1 = (x1 + ub) / 2.0d0
          endif
- 
+
          essx =  ess_gap(x1, phi_old, parasim, rstar)
 
          bisection_converged = abs(essx) < tol
          bisection_loops = bisection_loops + 1
- 
- 
- 
+
+
+
       end do
       !print*,bisection_loops
       bisection = x1
- 
+
     end function bisection
 
 
 end module fortress_smc_t
-
-
-  

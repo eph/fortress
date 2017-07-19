@@ -21,7 +21,7 @@ requirements:
     - flap
     - fruit
     - fruitpy
-    - lapack
+    - openblas
     #- mpich2
     - tqdm
 
