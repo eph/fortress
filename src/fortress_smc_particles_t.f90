@@ -11,6 +11,9 @@ module fortress_smc_particles_t
 
      double precision, allocatable :: loglh(:), loglhold(:), prior(:)
 
+   contains
+     procedure :: write_json
+
   end type fortress_smc_particles
 
   interface fortress_smc_particles

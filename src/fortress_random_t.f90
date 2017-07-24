@@ -185,7 +185,7 @@ contains
 #:if FC==0
     do j = 1, dim_b
        do i = 1, dim_a
-          rvs(i,j) = rand_gamma(k,theta)
+          rvs(i,j) = rand_gamma(k,1.0_wp/theta)
        end do
     end do
 #:elif FC > 0

@@ -1,4 +1,4 @@
-export PREFIX=/home/eherbst/anaconda3/
+#export PREFIX=. #/home/eherbst/anaconda3/
 export CONDA_BUILD=1
 export FC=gfortran
 make clean
