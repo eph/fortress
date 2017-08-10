@@ -100,7 +100,7 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
         os.makedirs(tmp_dir)
     except FileExistsError:
         print('Directory exists!')
-        
+      
     with open(os.path.join(tmp_dir, 'model_t.f90'), 'w') as f:
         modelfile = model_file.format(output_directory=os.path.abspath(output_directory))
         for name, contents in other_files.items():
@@ -118,7 +118,7 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
         f.write(driverfile)
 
     if other_files is not None:
-        
+      
         if isinstance(other_files, list):
             other_files = {f:f for f in other_files}
 

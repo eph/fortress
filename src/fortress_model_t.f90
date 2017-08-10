@@ -7,6 +7,7 @@
 module fortress_bayesian_model_t
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan 
   use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
   use fortress_util, only: read_array_from_file
   use filter, only: kalman_filter, chand_recursion, kalman_filter_missing, REALLY_NEG
@@ -316,6 +317,9 @@ real(wp) function lik_filter(self, para, T) result(l)
   if (present(T)) use_T = T
 
   l = sum(self%lik_filter_vec(para, T=use_T))
+
+  if ((isnan(l))) l = REALLY_NEG
+
 
 end function
 double precision function pdfy_lgss(m, t, states_new, states_old, para) result(pdf)

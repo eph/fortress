@@ -1,16 +1,17 @@
 package:
   name: fortress
-  version: 0.1.0
+  version: '0.1.2'
 
 source:
   path: ..
 
 build:
-  binary_relocation: true
-
+  binary_relocation: True
+  detect_binary_files_with_prefix: True
     
 requirements:
   build:
+    - python
     - flap
     - fruit 
     - fruitpy
@@ -19,6 +20,7 @@ requirements:
     - numpy 
 
   run:
+    - python
     - flap
     - fruit
     - fruitpy
@@ -26,22 +28,28 @@ requirements:
     - mpich2
     - tqdm
     - json-fortran 
-
+    - numpy
+    - tqdm
+    - pandas
 test:
-  files:
-    - ../test
-
-  source_files:
-    - test
-    - makefile
-    
-  requires:
-    - fruitpy
+  imports:
     - fortress
-    - lapack
-    #- mpich2
-    - json-fortran
-    - openblas
+
+# test:
+#   files:
+#     - ../test
+
+#   source_files:
+#     - test
+#     - makefile
+    
+#   requires:
+#     - fruitpy
+#     - fortress
+#     - lapack
+#     #- mpich2
+#     - json-fortran
+#     - openblas
 
 
     

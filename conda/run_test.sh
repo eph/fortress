@@ -1,1 +1,1 @@
-export FC=gfortran
+#export FC=gfortran

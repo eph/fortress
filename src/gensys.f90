@@ -113,17 +113,9 @@ contains
     RR = 0.0_wp
 
 
-    ! call write_array_to_file('GAM0.txt', G0)
-    ! call write_array_to_file('GAM1.txt', G1)
-    ! call write_array_to_file('PPI.txt', PI)
-    ! call write_array_to_file('PSI.txt', PSI)
-
- 
 
     !--------------------------------------------------
-
     ! Models with no forward looking components
-
     !-------------------------------------------------
 
     if (pin==0) then

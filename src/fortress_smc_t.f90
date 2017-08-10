@@ -1,7 +1,7 @@
 module fortress_smc_t
   use, intrinsic :: iso_fortran_env, only: wp => real64, &
        stdout => output_unit, stderr => error_unit
-
+  use, intrinsic :: ieee_arithmetic, only: isnan => ieee_is_nan 
 
   use flap, only : command_line_interface
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
@@ -238,12 +238,6 @@ contains
        call json%add(json_p, 'model_name', self%model%name)
        call json%add(json_p, 'nproc', self%nproc)
 
-       call json%create_object(json_ip,'prior')
-       call json%add(json_p, json_ip)
-       call parasim%write_json(json_ip)
-
-       nullify(json_ip)
-
     end if
     nodepara = fortress_smc_particles(nvars=self%model%npara, npart=self%ngap)
 
@@ -251,6 +245,15 @@ contains
     call parasim%mean_and_variance(mean, variance)
     call self%draw_from_prior(nodepara, self%temp%T_schedule(1))
     call gather_particles(parasim, nodepara)
+
+    if (rank == 0) then
+       call json%create_object(json_ip,'prior')
+       call json%add(json_p, json_ip)
+       call parasim%write_json(json_ip)
+
+       nullify(json_ip)
+
+    end if
 
     i = 2
     do while (i <= self%temp%nstages)
@@ -307,7 +310,7 @@ contains
              parasim%weights(j) = parasim%weights(j) * exp( &
                   (phi - phi_old)*(parasim%loglh(j)-parasim%loglhold(j)) )
           end do
-
+             
           call parasim%normalize_weights(self%temp%Z_estimates(i))
           self%temp%ESS_estimates(i) = parasim%ESS()
           print*,'iteration ', i,' of ', self%temp%nstages
