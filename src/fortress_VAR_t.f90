@@ -180,16 +180,14 @@ contains
 
     ! co-persistent dummy observations
     subt = subt+1;
-    ! print*, subt
-    ! print*,ybar
-    dumy(subt,:) = lam5 * ybar
 
+    dumy(subt,:) = lam5 * ybar
     do j = 1,p
        dumx(subt,(j-1)*ny+1:j*ny) = lam5 * ybar
     end do
-    if (constant==1) then
-       dumx(subt,ny*p+constant) = lam5
-    end if
+
+    if (constant==1) dumx(subt,ny*p+constant) = lam5
+       
 
 
     ! sum of coefficients dummies

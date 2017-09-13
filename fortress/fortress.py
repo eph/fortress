@@ -90,7 +90,7 @@ driverfile ="""program smc_driver
 end program smc_driver"""
 
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
-             lib_path='$(HOME)/anaconda3/lib',inc_path='$(HOME)/anaconda3/include',
+             lib_path='$(CONDA_PREFIX)/lib',inc_path='$(CONDA_PREFIX)/include',
              f90='mpif90', lapack='openblas'):
     """
     Makes an smc driver.
