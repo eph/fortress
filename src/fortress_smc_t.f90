@@ -244,9 +244,11 @@ contains
     call scatter_particles(parasim, nodepara)
     call parasim%mean_and_variance(mean, variance)
     call self%draw_from_prior(nodepara, self%temp%T_schedule(1))
+
     call gather_particles(parasim, nodepara)
 
     if (rank == 0) then
+
        call json%create_object(json_ip,'prior')
        call json%add(json_p, json_ip)
        call parasim%write_json(json_ip)
@@ -332,9 +334,9 @@ contains
           eps = self%rng%norm_rvs(self%model%npara*self%nintmh, self%npart)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
-          do bj = 1, self%model%npara
-             print*,mean(bj), sqrt(variance(bj,bj))
-          end do
+          ! do bj = 1, self%model%npara
+          !    print*,mean(bj), sqrt(variance(bj,bj))
+          ! end do
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
@@ -367,10 +369,11 @@ contains
 
           block_variance_chol = variance(b_ind, b_ind)
           if (self%conditional_covariance .and. (self%nblocks>1)) then
-
+             restsize = self%model%npara-bsize
+             allocate(rest_ind(restsize))
              rest_ind = pack([ (jj, jj = 1,self%model%npara )], &
                   [( (any(b_ind(:) == jj)), jj = 1,self%model%npara)].eqv..false.)
-             restsize = self%model%npara-bsize
+
              allocate(other_var(restsize,restsize), &
                   temp(bsize,restsize))
 
@@ -383,7 +386,7 @@ contains
              call dgemm('n','n',bsize,bsize, restsize, -1.0_wp, temp, bsize, &
                   variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
 
-             deallocate(other_var, temp)
+             deallocate(other_var, temp, rest_ind)
           end if
 
           call cholesky(block_variance_chol, info)
@@ -429,6 +432,7 @@ contains
 
                 p0 = nodepara%particles(:,j)
                 p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
+
                 loglh0 = self%model%lik(p0, T=current_T)
                 if ( nodepara%loglhold(j) /= 0.0_wp) then
                    loglhold0 = self%model%lik(p0, T=previous_T)
@@ -453,8 +457,9 @@ contains
                 deallocate(b_ind, block_variance_chol)
 
                 npara_old = npara_old + bsize
+                nodeuind = nodeuind + 1
              end do
-             nodeuind = nodeuind + 1
+
           end do
        end do
        previous_T = self%temp%T_schedule(i)
@@ -468,7 +473,8 @@ contains
           ahat = sum(acptsim) / (1.0_wp * self%npart * self%nintmh * self%model%npara)
           scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - 0.25_wp)) &
                / (1.0_wp + exp(16.0_wp*(ahat - 0.25_wp))))
-
+          print*,'acceptance rate', ahat, scale
+          print*,sum(log(self%temp%Z_estimates(1:i)))
           if (phi == 1.0_wp) then
              write(chart, '(I3.3)') current_T
              call json%create_object(json_ip,'posterior.'//trim(chart))
@@ -636,7 +642,11 @@ contains
 
     j = 1
 
-    paraextra = self%model%prior%rvs(1000)
+    print*,'runfdsfas2', smc_particles%nvars
+    print*, shape(paraextra)
+    !paraextra = self%model%prior%rvs(1000)
+    print*,'fdsfsad'
+
 
     neval = smc_particles%npart
     do i = 1, neval

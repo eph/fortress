@@ -551,12 +551,13 @@ end subroutine construct_SVAR
     type(fortress_random), optional :: rng
 
     type(fortress_random) :: use_rng
-    real(wp) :: parasim(self%npara, nsim)
+    real(wp) :: parasim(self%npara, nsim), parasimT(nsim, self%npara)
 
     use_rng = fortress_random()
     if (present(rng)) use_rng = rng
 
-    parasim = use_rng%mv_norm_rvs(nsim, self%npara, self%mu, self%chol_var)
+    parasimT = use_rng%mv_norm_rvs(nsim, self%npara, self%mu, self%chol_var)
+    parasim = transpose(parasimT)
 
   end function rvs
 
