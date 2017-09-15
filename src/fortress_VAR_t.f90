@@ -19,12 +19,14 @@ module tvt_t
      real(wp), allocatable :: hyper_phistar(:), hyper_Omega_inv(:,:), hyper_iw_Psi(:,:)
      integer :: hyper_iw_nu
 
+
    contains
      procedure :: rvs => rvs_mn
      procedure :: logpdf => logpdf_mn
      procedure :: para_to_sigma_phi
      procedure :: construct_prior_hyper
 
+     final :: clean_MinnesotaPrior
   end type MinnesotaPrior
 
   interface MinnesotaPrior
@@ -53,6 +55,12 @@ contains
 
   end function new_mn_prior
 
+  subroutine clean_MinnesotaPrior(self)
+    type(MinnesotaPrior) :: self
+    if (allocated(self%hyper_phistar)) deallocate(self%hyper_phistar)
+    if (allocated(self%hyper_Omega_inv)) deallocate(self%hyper_Omega_inv)
+    if (allocated(self%hyper_iw_Psi)) deallocate(self%hyper_iw_Psi)
+  end subroutine clean_MinnesotaPrior
 
   function mvnormal_pdf(x, mu, chol_sigma) result(logq)
     !! Computes the log of the n-dimensional multivariate normal pdf at x
@@ -207,12 +215,14 @@ contains
     end if
 
     ! Omega^-1 = (dumx'dumx)^-1
+    Omega = 0.0_wp
     call dgemm('t','n',dumc,dumc,dumr,1.0_wp,dumx,dumr,dumx,dumr,0.0_wp,Omega,dumc)
     hyper_Omega_inv = Omega
     call dgetrf(dumc,dumc,hyper_Omega_inv,dumc,ipiv,info)
     call dgetri(dumc,hyper_Omega_inv,dumc,ipiv,work,nF,info)
 
     ! mvn_mu = (dumx'*dumx)^-1 * dumx ' dumy
+    dumxp_dumy = 0.0_wp; mvn_mu_mat = 0.0_wp
     call dgemm('t','n',dumc,ny,dumr,1.0_wp,dumx,dumr,dumy,dumr,0.0_wp,dumxp_dumy,dumc)
 
     call dgemm('n','n',dumc,ny,dumc,1.0_wp,hyper_Omega_inv,dumc,dumxp_dumy,dumc,0.0_wp,mvn_mu_mat,dumc)
@@ -221,6 +231,7 @@ contains
     end do
 
     ! Psi = dumy'dumy - mvn_mu ' omega * mvn_mu
+    hyper_iw_Psi = 0.0_wp
     call dgemm('t','n',ny,ny,dumr,1.0_wp,dumy,dumr,dumy,dumr,0.0_wp,hyper_iw_Psi(1:ny,:),ny)
     call dgemm('t','n',ny,ny,dumc,-1.0_wp,hyper_phistar,dumc,dumxp_dumy,dumc,1.0_wp,hyper_iw_Psi(1:ny,:),ny)
 
@@ -284,7 +295,6 @@ contains
 
     real(wp) :: F(self%nF/self%ny, self%ny)
 
-
     use_rng = fortress_random()
     if (present(rng)) use_rng = rng
 
@@ -301,7 +311,9 @@ contains
           ind0 = ind0 + k
        end do
 
+       mvn_covar = 0.0_wp
        call Kronecker(ny,ny,nF/ny,nF/ny,nF,nF,0.0_wp,1.0_wp,iW,self%hyper_Omega_inv,mvn_covar)
+       info = 0
        call cholesky(mvn_covar, info)
 
        dev_F = use_rng%norm_rvs(self%nF, 1)
@@ -309,6 +321,7 @@ contains
 
        call dgemv('n',nF,nF,1.0_wp,mvn_covar,nF,dev_F(:,1),1,1.0_wp,Fvec,1)
        parasim(self%nA+1:self%npara,j) = Fvec
+
        ! do k = 1,ny
        !    !F(:,k) = Fvec((k-1)*nF/ny+1:k*nF/ny)
        ! end do
@@ -336,9 +349,10 @@ contains
 
     lpdf = logiwishpdf(self%hyper_iw_nu, self%hyper_iw_Psi, sigma, self%ny)
 
+    mvn_covar = 0.0_wp
     call Kronecker(ny,ny,nF/ny,nF/ny,nF,nF,0.0_wp,1.0_wp,sigma,self%hyper_Omega_inv,mvn_covar)
     call cholesky(mvn_covar, info)
-
+    
     lpdf = lpdf + mvnormal_pdf(para(self%nA+1:self%npara), self%hyper_phistar, mvn_covar)
 
 

@@ -475,6 +475,7 @@ contains
                / (1.0_wp + exp(16.0_wp*(ahat - 0.25_wp))))
           print*,'acceptance rate', ahat, scale
           print*,sum(log(self%temp%Z_estimates(1:i)))
+          print*,sum(parasim%loglh)/self%npart, sum(parasim%prior)/self%npart
           if (phi == 1.0_wp) then
              write(chart, '(I3.3)') current_T
              call json%create_object(json_ip,'posterior.'//trim(chart))

@@ -21,7 +21,7 @@ CONTAINS
   ! Random Sample from normal (Gaussian) distribution
   !
   FUNCTION rand_normal(mean,stdev) RESULT(c)
-    DOUBLE PRECISION :: mean,stdev,c,temp(2)
+    DOUBLE PRECISION :: mean,stdev,c,temp(2), r, theta
     IF(stdev <= 0.0d0) THEN
 
        WRITE(*,*) "Standard Deviation must be +ve"
@@ -50,8 +50,8 @@ CONTAINS
   !
   ! Return a random sample from a gamma distribution
   !
-  RECURSIVE FUNCTION rand_gamma(shape, SCALE) RESULT(ans)
-    DOUBLE PRECISION SHAPE,scale,u,w,d,c,x,xsq,g
+  DOUBLE PRECISION RECURSIVE FUNCTION rand_gamma(shape, SCALE) RESULT(ans)
+    DOUBLE PRECISION SHAPE,scale,u,w,d,c,x,xsq,g,v,r
     IF (shape <= 0.0d0) THEN
        WRITE(*,*) "Shape PARAMETER must be positive"
     END IF
@@ -107,8 +107,8 @@ CONTAINS
   !
   ! ## return a random sample from an inverse gamma random variable
   !
-  FUNCTION rand_inverse_gamma(shape, SCALE) RESULT(ans)
-    DOUBLE PRECISION SHAPE,scale,ans
+  DOUBLE PRECISION FUNCTION rand_inverse_gamma(shape, SCALE) RESULT(ans)
+    DOUBLE PRECISION SHAPE,scale
 
     ! ## If X is gamma(shape, scale) then
     ! ## 1/Y is inverse gamma(shape, 1/scale)
