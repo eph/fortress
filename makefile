@@ -12,7 +12,7 @@ ifeq ($(FC), ifort)
 endif
 
 ifeq ($(FC), gfortran)
-#	FC=mpif90 -f90=gfortran -ffree-line-length-1000 -Wall -fcheck=all -g -fbacktrace #03
+#FC=mpif90 -fstack-protector -fimplicit-none -Og -f90=gfortran -ffree-line-length-1000 -Wall -fcheck=all -g -fbacktrace #03
 	FC=mpif90 -f90=gfortran -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace #03 removed ffast-math
 	FCDEC=-DGFORTRAN
 endif
@@ -49,11 +49,17 @@ test_%.o : test_%.f90
 	rm $(notdir $(basename $<))_tmp.f90
 
 
-test_driver: test_driver.f90 $(LOBJS) test_model_t.o test_VAR_t.o test_VAR.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o test_gensys.o
+test_driver: test_driver.f90 libfortress.so $(LOBJS) test_model_t.o test_VAR_t.o test_VAR.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o test_gensys.o 
 	$(FC) -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) -lopenblas
+
+smc_driver: smc_driver.f90 /home/eherbst/Dropbox/var_smc_estimation/replication-code/smc_msvar/_fortress_tmp3/model_t.f90 $(LIBOBJS)
+	$(FC) -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) -lopenblas
+
 
 libfortress.so: fortress.f90  $(LIBOBJS) 
 	$(FC) -shared -o $@  $^ 
+
+
 
 test: test_driver.o
 	python conda/run_test.py

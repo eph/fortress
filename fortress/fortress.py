@@ -8,7 +8,7 @@ my_env = os.environ.copy()
 my_env['OPENBLAS_NUM_THREADS'] = '1'
 
 if 'CONDA_PREFIX' in my_env.keys():
-    inc_pat = '$(CONDA_PREFIX)/include'
+    inc_path = '$(CONDA_PREFIX)/include'
     lib_path = '$(CONDA_PREFIX)/lib'
 elif 'ANACONDA_PATH' in my_env.keys():
     inc_path = '$(ANACONDA_PATH)/../include'
