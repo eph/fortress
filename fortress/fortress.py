@@ -6,6 +6,19 @@ import tqdm
 import pandas as p
 my_env = os.environ.copy()
 my_env['OPENBLAS_NUM_THREADS'] = '1'
+
+if 'CONDA_PREFIX' in my_env.keys():
+    inc_pat = '$(CONDA_PREFIX)/include'
+    lib_path = '$(CONDA_PREFIX)/lib'
+elif 'ANACONDA_PATH' in my_env.keys():
+    inc_path = '$(ANACONDA_PATH)/../include'
+    lib_path = '$(ANACONDA_PATH)/../lib'
+else:
+    print('Error Setting PATHs for lib and including -- specify manually')
+    inc_path = '$(ANACONDA_PATH)/../include'
+    lib_path = '$(ANACONDA_PATH)/../lib'
+
+
 #my_env['LD_LIBRARY_PATH']='/home/eherbst/Dropbox/code/fortress'
 
 class SMCDriver(object):
@@ -57,7 +70,7 @@ FLAP=-I$(INC)/flap -L$(LIB) -lflap
 FORTRESS=-I$(INC)/fortress -L$(LIB)/fortress -lfortress
 JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
-FC={f90} -O3 #-Wall -fcheck=all -g -fbacktrace
+FC={f90} -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace
 
 smc_driver : smc_driver.f90 {model_file}
 \t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o smc 
@@ -90,8 +103,7 @@ driverfile ="""program smc_driver
 end program smc_driver"""
 
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
-             lib_path='$(CONDA_PREFIX)/lib',inc_path='$(CONDA_PREFIX)/include',
-             f90='mpif90', lapack='openblas'):
+             lib_path=lib_path,inc_path=inc_path, f90='mpif90', lapack='openblas'):
     """
     Makes an smc driver.
     """

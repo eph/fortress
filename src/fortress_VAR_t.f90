@@ -567,9 +567,12 @@ end subroutine construct_SVAR
     type(fortress_random) :: use_rng
     real(wp) :: parasim(self%npara, nsim), parasimT(nsim, self%npara)
 
-    use_rng = fortress_random()
-    if (present(rng)) use_rng = rng
 
+    if (present(rng)) then
+       use_rng = rng
+    else
+       use_rng = fortress_random()
+    end if
     parasimT = use_rng%mv_norm_rvs(nsim, self%npara, self%mu, self%chol_var)
     parasim = transpose(parasimT)
 

@@ -334,9 +334,9 @@ contains
           eps = self%rng%norm_rvs(self%model%npara*self%nintmh, self%npart)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
-          ! do bj = 1, self%model%npara
-          !    print*,mean(bj), sqrt(variance(bj,bj))
-          ! end do
+          do bj = 1, self%model%npara
+             print*,bj,mean(bj), sqrt(variance(bj,bj))
+          end do
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
