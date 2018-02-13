@@ -102,6 +102,69 @@ driverfile ="""program smc_driver
   call mpi_finalize(mpierror)
 end program smc_driver"""
 
+simplefile ="""
+module model_t
+  use, intrinsic :: iso_fortran_env, only: wp => real64
+
+  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
+  use fortress_prior_t, only: model_prior => prior 
+
+  {other_includes}
+
+  implicit none
+
+  type, public, extends(fortress_abstract_bayesian_model) :: model
+
+  contains
+    procedure :: lik
+  end type model
+
+  interface model
+    module procedure new_model
+  end interface model
+
+contains
+
+type(model) function new_model() result(self)
+
+character(len=144) :: name, datafile, priorfile
+integer :: nobs, T, npara
+
+name = 'qar'
+datafile = 'data.txt'
+priorfile = 'prior.txt'
+
+nobs = 1
+T = {T}
+npara = {npara}
+
+call self%construct_model(name, datafile, npara, nobs, T)
+
+allocate(self%prior, source=model_prior(priorfile))
+
+end function new_model
+
+function lik(self, para, T) result(l)
+class(model), intent(inout) :: self
+
+real(wp), intent(in) :: para(self%npara)
+integer, intent(in), optional :: T
+real(wp) :: l
+
+{lik}
+
+end function lik
+
+{other_functions}
+
+end module model_t
+"""
+
+def make_model_file(lik,npara,T,other_functions='',other_includes=''):
+
+    return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions)
+
+
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
              lib_path=lib_path,inc_path=inc_path, f90='mpif90', lapack='openblas'):
     """
@@ -124,7 +187,8 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
         f.write(modelfile)
 
     with open(os.path.join(tmp_dir, 'makefile'), 'w') as f:
-        f.write(makefile.format(model_file='model_t.f90',lib_path=lib_path,inc_path=inc_path,f90=f90,lapack=lapack))
+        f.write(makefile.format(model_file='model_t.f90',
+                                lib_path=lib_path,inc_path=inc_path,f90=f90,lapack=lapack))
 
     with open(os.path.join(tmp_dir, 'smc_driver.f90'), 'w') as f:
         f.write(driverfile)
