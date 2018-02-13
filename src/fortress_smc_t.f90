@@ -1,7 +1,7 @@
 module fortress_smc_t
   use, intrinsic :: iso_fortran_env, only: wp => real64, &
        stdout => output_unit, stderr => error_unit
-  use, intrinsic :: ieee_arithmetic, only: isnan => ieee_is_nan 
+  !use, intrinsic :: ieee_arithmetic, only: isnan => ieee_is_nan 
 
   use flap, only : command_line_interface
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
@@ -55,7 +55,7 @@ module fortress_smc_t
      real(wp) :: initial_c, mix_alpha
      logical :: mcmc_mix, conditional_covariance
      integer :: seed
-     character(len=200) :: output_dir, init_file
+     character(len=200) :: output_file, init_file
 
      integer :: nproc
      integer :: ngap
@@ -142,7 +142,7 @@ contains
     call smc%cli%get(switch='-we',val=smc%write_every,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-sh',val=smc%save_hyper,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-fh',val=smc%fixed_hyper,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-od',val=smc%output_dir,error=err); if (err /=0) stop 1
+    call smc%cli%get(switch='-od',val=smc%output_file,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-s',val=smc%seed,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-nb',val=smc%nblocks,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
@@ -493,7 +493,7 @@ contains
     if (rank==0) then
        print*,'Writing Output'
        call self%temp%write_json(json_p)
-       call json%print(json_p, 'output.json')
+       call json%print(json_p, self%output_file)
        call json%destroy(json_p)
     end if
   end subroutine estimate
@@ -578,8 +578,8 @@ contains
          required=.false.,act='store',def='1848',error=error)
     call cli%add(switch='--no-mix', switch_ab='-u', &
          required=.false.,act='store_true',def='.true.',error=error)
-    call cli%add(switch='--output_dir', switch_ab='-od', &
-         required=.false.,act='store',def='./',error=error, help='The base output directory.')
+    call cli%add(switch='--output-file', switch_ab='-od', &
+         required=.false.,act='store',def='output.json',error=error, help='The name of the output file')
     call cli%add(switch='--conditional-covariance', switch_ab='-cc', &
          required=.false.,act='store_true',def='.false.',error=error, &
          help='Conditional covariance.')
