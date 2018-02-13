@@ -5,7 +5,6 @@ $PYTHON --version
 $PYTHON setup.py build
 $PYTHON setup.py install
 export CONDA_BUILD=1
-export FC=gfortran
 make clean
 make libfortress.so
 cp libfortress.so $PREFIX/lib

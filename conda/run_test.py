@@ -11,6 +11,7 @@ test_modules = [#'test/test_VAR.f90',
                #'test/test_linalg.f90',
                #'test/test_util.f90',
                'test/test_gensys.f90',
+               'test/test_random.f90'
                #'test/test_smc.f90',
                #'test/test_particles.f90',
                #'test/test_particle_filter.f90'

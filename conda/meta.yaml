@@ -12,6 +12,10 @@ build:
 requirements:
   build:
     - python
+    - toolchain
+    - libgfortran
+    - libgcc
+    - gfortran_linux-64
     - flap
     - fruit 
     - fruitpy
