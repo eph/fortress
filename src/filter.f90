@@ -43,7 +43,6 @@ module filter
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
   use fortress_linalg, only: determinant, dlyap
-  use omp_lib
 
   implicit none 
 
