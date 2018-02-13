@@ -283,7 +283,7 @@ contains
 
     integer, intent(in) :: nsim
     integer, optional :: seed
-    type(fortress_random), optional :: rng
+    type(fortress_random), optional, intent(inout) :: rng
 
     type(fortress_random) :: use_rng
     real(wp) :: parasim(self%npara, nsim)
@@ -295,8 +295,11 @@ contains
 
     real(wp) :: F(self%nF/self%ny, self%ny)
 
-    use_rng = fortress_random()
-    if (present(rng)) use_rng = rng
+    if (present(rng)) then
+       use_rng = rng
+    else
+       use_rng = fortress_random()
+    end if
 
     ny = self%ny
     nF = self%nF
@@ -562,7 +565,7 @@ end subroutine construct_SVAR
     integer, intent(in) :: nsim
     integer, optional :: seed
 
-    type(fortress_random), optional :: rng
+    type(fortress_random), optional, intent(inout) :: rng
 
     type(fortress_random) :: use_rng
     real(wp) :: parasim(self%npara, nsim), parasimT(nsim, self%npara)

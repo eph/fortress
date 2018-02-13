@@ -2,7 +2,16 @@ module test_var
   use, intrinsic :: iso_fortran_env, only: wp => real64
 
   use fruit
+
+  use fortress_prior_t, only: fortress_abstract_prior
+
+
   implicit none
+
+  type, public :: prior_set
+     class(fortress_abstract_prior), pointer :: pr
+  end type prior_set
+
 
 contains
 
@@ -48,6 +57,35 @@ contains
     call assert_equals(1, minnpr%constant)
     
   end subroutine test_var_init
+
+  subroutine test_VAR_mult_rvs
+
+    use tvt_t, only: MinnesotaPrior
+    use fortress_random_t, only: fortress_random
+    
+    type(MinnesotaPrior) :: minnpr
+
+    type(fortress_random) :: rng
+    class(prior_set), allocatable, dimension(:) :: coeff_prior
+
+    real(wp) :: rvs1(3,1000), rvs2(3,1000)
+
+    rng = fortress_random()
+    minnpr = MinnesotaPrior(1,1,1,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,[0.0_wp],[0.0_wp])
+    call assert_equals(0.0_wp, 1.0_wp, 0.00001_wp)
+    allocate(coeff_prior(2))
+
+    allocate(coeff_prior(1)%pr,source=minnpr)
+    minnpr = MinnesotaPrior(1,1,1,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,1.0_wp,[0.0_wp],[0.0_wp])
+
+    allocate(coeff_prior(1)%pr,source=minnpr)
+
+    rvs1 = coeff_prior(1)%pr%rvs(1000, rng=rng)
+    rvs2 = coeff_prior(2)%pr%rvs(1000, rng=rng)
+
+
+    deallocate(coeff_prior)
+  end subroutine test_VAR_mult_rvs
 
   subroutine test_svar
 

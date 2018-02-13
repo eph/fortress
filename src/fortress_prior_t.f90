@@ -31,7 +31,7 @@ module fortress_prior_t
        class(fortress_abstract_prior), intent(inout) :: self
        integer, intent(in) :: nsim
        integer, optional :: seed 
-       type(fortress_random), optional :: rng
+       type(fortress_random), optional, intent(inout) :: rng
 
        real(wp) :: parasim(self%npara,nsim)
      end function rvs_interface
@@ -202,7 +202,7 @@ contains
 
     integer, intent(in) :: nsim
     integer, optional :: seed 
-    type(fortress_random), optional :: rng
+    type(fortress_random), optional, intent(inout) :: rng
 
     integer :: prior_seed
     type(fortress_random) :: prior_rvs

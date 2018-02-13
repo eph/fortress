@@ -7,7 +7,6 @@
 module fortress_bayesian_model_t
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
-  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan 
   use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
   use fortress_util, only: read_array_from_file
   use filter, only: kalman_filter, chand_recursion, kalman_filter_missing, REALLY_NEG

@@ -76,5 +76,32 @@ contains
 
   end subroutine test_mvn_norm
   
+  subroutine draw1(rng, rvs)
+    use fortress, only: fortress_random
+    type(fortress_random), intent(in) :: rng
+    real(wp) :: rvs(1,1)
 
+    rvs = rng%norm_rvs(1,1)
+    
+  end subroutine draw1
+
+  subroutine test_passing_rng
+    use fortress, only: fortress_random
+
+    type(fortress_random) :: rng
+
+    real(wp) :: d1, d2, x(1,1)
+
+    rng = fortress_random()
+    call draw1(rng, x)
+    d1 = x(1,1)
+
+    call draw1(rng, x)
+    d2 = x(1,1)
+
+    call assert_equals(d1, d2, 0.00001_wp)
+  end subroutine test_passing_rng
+
+
+  
 end module test_random
