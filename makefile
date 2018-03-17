@@ -11,8 +11,8 @@ LIBOBJS=fortress_info.o fortress_util.o fortress_linalg.o randlib.o fortress_ran
 # endif
 
 
-COMPILER=mpif90 -fopenmp -fstack-protector -fimplicit-none -O3 -f90=$(FC) -ffree-line-length-1000 # -Wall -fcheck=all -g -fbacktrace #03
-#	FC=mpif90 -f90=gfortran -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace #03 removed ffast-math
+COMPILER=mpif90 -fstack-protector -fimplicit-none -O3 -ffree-line-length-1000 # -Wall -fcheck=all -g -fbacktrace #03
+#COMPILER=mpif90 -Wall -fcheck=all -g -fbacktrace -ffree-line-length-1000 # 
 FCDEC=-DGFORTRAN
 
 
@@ -30,7 +30,7 @@ endif
 FPP=fypp
 FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
 FLAP=-I$(INC)/flap -L$(LIB) -lflap
-#FORTRESS=-I$(INC)/fortress -L$(LIB) -lfortress
+FORTRESS=-I$(INC)/fortress -L$(LIB) -lfortress
 FORTRESS= -L. -lfortress -Wl,-rpath=.
 JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
@@ -48,11 +48,11 @@ test_%.o : test_%.f90
 	rm $(notdir $(basename $<))_tmp.f90
 
 
-test_driver: test_driver.f90 libfortress.so $(LOBJS) test_model_t.o test_VAR_t.o test_VAR.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o test_gensys.o 
-	$(COMPILER) -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) -lopenblas
+test_driver: test_driver.f90 libfortress.so $(LOBJS) test_model_t.o test_model.o test_prior.o test_random.o test_linalg.o test_smc.o test_util.o test_particles.o test_particle_filter.o test_gensys.o test_json.o
+	$(COMPILER) $^ -o $@ $(JSON) $(FORTRESS) -lopenblas $(FLAP) $(JSON) $(FRUIT)
 
 smc_driver: smc_driver.f90 /home/eherbst/Dropbox/var_smc_estimation/replication-code/smc_msvar/_fortress_tmp/model_t.f90 $(LIBOBJS)
-	$(COMPILER) -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) -lopenblas
+	$(COMPILER) $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) $^ -o $@ -llapack $(FORTRESS) $(FLAP) $(FRUIT) $(JSON) -lopenblas
 
 
 libfortress.so: fortress.f90  $(LIBOBJS) 

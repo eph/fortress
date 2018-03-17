@@ -12,16 +12,15 @@ build:
 requirements:
   build:
     - python
-    - toolchain
-    - libgfortran
-    - libgcc
-    - gfortran_linux-64
+    - numpy 
+    - {{ compiler('fortran') }}
+    - mpich
     - flap
     - fruit 
     - fruitpy
     - fypp
     - json-fortran
-    - numpy 
+
 
   run:
     - python
@@ -29,7 +28,7 @@ requirements:
     - fruit
     - fruitpy
     - openblas
-    - mpich2
+    - mpich
     - tqdm
     - json-fortran 
     - numpy
