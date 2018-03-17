@@ -35,7 +35,9 @@ class SMCDriver(object):
     def run(self, **kwargs): 
         nproc = kwargs.pop('nproc',1)
         envs = kwargs.pop('env', {})
+        output_file = kwargs.get('output_file','output.json')
 
+        
         my_env.update(envs)
 
         mpi = 'mpirun -n {} '.format(nproc)
@@ -57,7 +59,7 @@ class SMCDriver(object):
 
         pbar.close()
 
-        return json.loads(open('output.json').read())
+        return json.loads(open(output_file).read())
 
 
 
@@ -72,7 +74,7 @@ JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
 
 FC={f90} -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace
 
-smc_driver : smc_driver.f90 {model_file}
+smc_driver : {model_file} smc_driver.f90 
 \t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o smc 
 """
 
@@ -162,11 +164,11 @@ end module model_t
 
 def make_model_file(lik,npara,T,other_functions='',other_includes=''):
 
-    return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions)
+    return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions,other_includes=other_inclues)
 
 
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
-             lib_path=lib_path,inc_path=inc_path, f90='mpif90', lapack='openblas'):
+             lib_path=lib_path,inc_path=inc_path, f90='mpif90', lapack='openblas',check=True):
     """
     Makes an smc driver.
     """
@@ -215,7 +217,7 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
 
 
     proc = subprocess.run('cd {} && make smc_driver'.format(os.path.abspath(tmp_dir)),
-                          shell=True, check=True, stderr=subprocess.STDOUT, env=my_env)
+                          shell=True, check=check, stderr=subprocess.STDOUT, env=my_env)
 
     return(SMCDriver(os.path.abspath(os.path.join(tmp_dir,'smc'))))
                 
