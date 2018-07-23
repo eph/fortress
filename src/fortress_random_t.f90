@@ -1,4 +1,4 @@
-#:setvar FC defined('IFORT')
+$:setvar("FC", defined('IFORT'))
 #:if FC>0
      include 'mkl_vsl.fi'
 #:endif
