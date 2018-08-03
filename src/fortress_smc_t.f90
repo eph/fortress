@@ -46,7 +46,7 @@ module fortress_smc_t
 
      class(fortress_abstract_bayesian_model), allocatable :: model
 
-     integer :: npart, nphi, nintmh, trial, nblocks
+     integer :: npart, nphi, nintmh, trial, nblocks, npriorextra
 
      integer :: start_geweke
      real(wp) :: lambda
@@ -149,7 +149,8 @@ contains
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
-
+    call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
+    
     print*,'Initializing SMC for model: ', smc%model%name
     print*, smc%npart, smc%nphi
 
@@ -592,7 +593,9 @@ contains
     call cli%add(switch='--initial-particles', switch_ab='-pf', &
          required=.false.,act='store',def='none',error=error, &
          help='file with draws from prior')
-
+    call cli%add(switch='--npriorextra', switch_ab='-pe', &
+         help='Number of extra draws from prior (integer)', &
+         required=.false.,act='store',def='1000', error=error)
 
   end function initialize_cli
 
@@ -638,15 +641,14 @@ contains
 
     integer :: i,j, neval
     real(wp) :: lik0, p0(self%model%npara)
-
-    real(wp) :: paraextra(smc_particles%nvars, 1000)
+    real(wp) :: paraextra(smc_particles%nvars, self%npriorextra)
 
     j = 1
 
     print*,'runfdsfas2', smc_particles%nvars
     print*, shape(paraextra)
-    !paraextra = self%model%prior%rvs(1000)
-    print*,'fdsfsad'
+    paraextra = self%model%prior%rvs(self%npriorextra)
+    !print*,'fdsfsad'
 
 
     neval = smc_particles%npart
@@ -665,10 +667,11 @@ contains
        do while (lik0 < -10.0_wp**9)
           p0 = paraextra(:,j)
           lik0 = self%model%lik(p0, T=likT)
+
           if (isnan(lik0)) lik0 = -10000000000000.0_wp
 
           j = j + 1
-          if (j > 1000) then
+          if (j > self%npriorextra) then
              write(stderr, *) 'Prior is too far from likelihood ... '
              stop
           end if
