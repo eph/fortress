@@ -59,7 +59,8 @@ libfortress.so: fortress.f90  $(LIBOBJS)
 	$(COMPILER) -shared -o $@  $^ 
 
 
-
+test_function_enclosure : test_function_enclosure.f90 libfortress.so test_model_t.o
+	$(COMPILER) $^ -o $@ $(JSON) $(FORTRESS) -lopenblas $(FLAP) $(JSON) $(FRUIT)
 test: test_driver.o
 	python conda/run_test.py
 

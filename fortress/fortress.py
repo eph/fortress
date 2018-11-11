@@ -76,6 +76,9 @@ FC={f90} -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace
 
 smc_driver : {model_file} smc_driver.f90 
 \t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o smc 
+
+check_likelihood : {model_file} check_likelihood.f90 
+\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o check_likelihood 
 """
 
 import os
@@ -103,6 +106,22 @@ driverfile ="""program smc_driver
   call smc%estimate(rank)
   call mpi_finalize(mpierror)
 end program smc_driver"""
+
+checkfile ="""program check_likelihood
+  use iso_fortran_env, only: wp => real64
+
+  use model_t, only: model
+
+  implicit none
+  include 'mpif.h'
+
+  type(model) :: smc_model
+
+  real(wp) :: lik0 
+  smc_model = model()
+  lik0 = smc_model%lik(smc_model%p0)
+  print*,'Likelihood @ p0: ', lik0
+end program check_likelihood"""
 
 simplefile ="""
 module model_t
@@ -194,6 +213,9 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
 
     with open(os.path.join(tmp_dir, 'smc_driver.f90'), 'w') as f:
         f.write(driverfile)
+
+    with open(os.path.join(tmp_dir, 'check_likelihood.f90'), 'w') as f:
+        f.write(checkfile)
 
     if other_files is not None:
       
