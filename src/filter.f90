@@ -68,7 +68,7 @@ contains
     real(wp) :: yhat(ny), nut(ny), Ft(ny,ny), iFt(ny,ny), detFt
     integer :: t, info
 
-    real(wp) :: ZZP0(ny,ns), iFtnut(ny,ny), gain(ns), C(ns,ns), KtiFt(ns,ny), TTPt(ns,ns)
+    real(wp) :: ZZP0(ny,ns), iFtnut(ny), gain(ns), C(ns,ns), KtiFt(ns,ny), TTPt(ns,ns)
 
     ! BLAS functions
     real(wp) :: ddot
