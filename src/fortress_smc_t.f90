@@ -326,20 +326,22 @@ contains
           write(*,'(A,I4,A,I4)') 'Iteration', i,' of ', self%temp%nstages
           write(*,'(A,I4,A,F8.4,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
           write(*,'(A,I4,A,F8.4,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
-          write(*,'(A,F8.2, A, I8.0)')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
+          write(*,'(A,F8.2, A, I8.0)',advance='no')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
           !------------------------------------------------------------
           ! Selection
           !------------------------------------------------------------
           !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
           if ((self%temp%ESS_estimates(i) < self%npart * self%resample_tol) &
                .or. (self%endog_tempering)) then
-             write(*,'(A)') '\r [Resampling]'
+             write(*,'(A)') ' [resampling]'
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
              parasim%loglh = parasim%loglh(resample_ind)
              parasim%loglhold = parasim%loglhold(resample_ind)
 
+          else
+             print*, ''
           end if
 
           eps = self%rng%norm_rvs(self%model%npara*self%nintmh, self%npart)
@@ -495,8 +497,9 @@ contains
           scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - 0.25_wp)) &
                / (1.0_wp + exp(16.0_wp*(ahat - 0.25_wp))))
           write(*,'(A,F4.2,A,F5.3,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
-          write(*,'(A,F8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
-          print*,sum(parasim%loglh)/self%npart, sum(parasim%prior)/self%npart
+          write(*,'(A,F 8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
+          write(*,'(A,F 8.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
+          write(*,'(A,F 8.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
           if ((phi == 1.0_wp) .and. (current_T >= self%T_write_thresh) )then
              write(chart, '(I3.3)') current_T
              call json%create_object(json_ip,'posterior.'//trim(chart))
@@ -677,10 +680,8 @@ contains
 
     j = 1
 
-    print*,'runfdsfas2', smc_particles%nvars
-    print*, shape(paraextra)
+
     paraextra = self%model%prior%rvs(self%npriorextra)
-    !print*,'fdsfsad'
 
 
     neval = smc_particles%npart
