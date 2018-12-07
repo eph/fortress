@@ -293,7 +293,7 @@ contains
 
              if (ess_gap1 > 0.0_wp) then
                 phi = self%temp%phi_max
-                if (current_T == self%model%T) self%temp%nstages = i
+                if (current_T == self%model%T) i = self%temp%nstages
              else
                 do while (isnan(ess_gap1))
                    phi0 = max(phi0 / 2.0_wp, phi_old+0.01_wp)
@@ -351,6 +351,11 @@ contains
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
 
        end if
+
+       ! for endogenous tempering wiht multiprocessing
+       call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, &
+            0, MPI_COMM_WORLD, mpierror)
+       self%temp%phi_schedule(i) = phi
 
        call mpi_scatter(eps, self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, nodeeps, &
             self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
@@ -494,7 +499,11 @@ contains
           end if
        end if
 
+       if ((self%endog_tempering) .and. (phi == 1.0_wp)) then
+          self%temp%T_schedule(i+1:self%temp%nstages) = current_T + 1
+       end if
        call mpi_bcast(scale, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call mpi_barrier(MPI_COMM_WORLD, mpierror)
 
        i = i + 1
     end do
@@ -775,8 +784,8 @@ contains
     real(wp) ::  max1, max2
     !nw = fortress_smc_particles(npart=parasim%npart)
     !nw%weights = exp( (phi - phi_old) * parasim%loglh) !* nw%weights
-    new_weight = (phi-phi_old)*parasim%loglh
-    new_weight2 = 2.0_wp*(phi-phi_old)*parasim%loglh
+    new_weight = (phi-phi_old)*(parasim%loglh - parasim%loglhold)
+    new_weight2 = 2.0_wp*(phi-phi_old)*(parasim%loglh- parasim%loglhold)
 
     max1 = maxval(new_weight)
     max2 = maxval(new_weight2)
