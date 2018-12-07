@@ -50,7 +50,7 @@ module fortress_smc_t
 
      integer :: start_geweke
      real(wp) :: lambda
-     integer :: write_every
+     integer :: write_every, T_write_thresh
      logical :: save_hyper, fixed_hyper
      real(wp) :: initial_c, mix_alpha
      logical :: mcmc_mix, conditional_covariance
@@ -150,7 +150,7 @@ contains
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
-    
+    call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err); if(err/=0) stop 1
     print*,'Initializing SMC for model: ', smc%model%name
     print*, smc%npart, smc%nphi
 
@@ -164,6 +164,8 @@ contains
 
     smc%temp = tempering_schedule(smc%nphi, smc%lambda, smc%model%T)
     smc%nphi = smc%temp%nstages
+
+    if (smc%T_write_thresh == -1) smc%T_write_thresh = smc%model%T
 
   end function new_smc
 
@@ -316,14 +318,18 @@ contains
              
           call parasim%normalize_weights(self%temp%Z_estimates(i))
           self%temp%ESS_estimates(i) = parasim%ESS()
-          print*,'iteration ', i,' of ', self%temp%nstages
-
+          print*,'============================================================='
+          write(*,'(A,I4,A,I4)') 'Iteration', i,' of ', self%temp%nstages
+          write(*,'(A,I4,A,F8.4,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
+          write(*,'(A,I4,A,F8.4,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
+          write(*,'(A,F8.2, A, I8.0)')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
           !------------------------------------------------------------
           ! Selection
           !------------------------------------------------------------
           !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
-          if (self%temp%ESS_estimates(i) < self%npart * self%resample_tol) then
-
+          if ((self%temp%ESS_estimates(i) < self%npart * self%resample_tol) &
+               .or. (self%endog_tempering)) then
+             write(*,'(A)') '\r [Resampling]'
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
@@ -335,8 +341,10 @@ contains
           eps = self%rng%norm_rvs(self%model%npara*self%nintmh, self%npart)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
+          write(*,'(A)') '             mu    std'
+          write(*,'(A)') '           -----  -----'
           do bj = 1, self%model%npara
-             print*,bj,mean(bj), sqrt(variance(bj,bj))
+             write(*, '(A,I3,A,F7.3,F7.3)') 'para[',bj,']',mean(bj), sqrt(variance(bj,bj))
           end do
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
@@ -469,15 +477,15 @@ contains
             acptsim, self%ngap*self%model%npara, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror )
        call gather_particles(parasim, nodepara)
 
-       if (rank == 0.0_wp) then
+       if (rank == 0) then
 
           ahat = sum(acptsim) / (1.0_wp * self%npart * self%nintmh * self%model%npara)
           scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - 0.25_wp)) &
                / (1.0_wp + exp(16.0_wp*(ahat - 0.25_wp))))
-          print*,'acceptance rate', ahat, scale
-          print*,sum(log(self%temp%Z_estimates(1:i)))
+          write(*,'(A,F4.2,A,F5.3,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
+          write(*,'(A,F8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
           print*,sum(parasim%loglh)/self%npart, sum(parasim%prior)/self%npart
-          if (phi == 1.0_wp) then
+          if ((phi == 1.0_wp) .and. (current_T >= self%T_write_thresh) )then
              write(chart, '(I3.3)') current_T
              call json%create_object(json_ip,'posterior.'//trim(chart))
              call json%add(json_p, json_ip)
@@ -596,6 +604,11 @@ contains
     call cli%add(switch='--npriorextra', switch_ab='-pe', &
          help='Number of extra draws from prior (integer)', &
          required=.false.,act='store',def='1000', error=error)
+    call cli%add(switch='--T-write-thresh', switch_ab='-twt', &
+         help='T to start writing posterior at', &
+         required=.false.,act='store',def='-1', error=error)
+
+
 
   end function initialize_cli
 
