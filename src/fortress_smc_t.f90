@@ -167,6 +167,10 @@ contains
 
     if (smc%T_write_thresh == -1) smc%T_write_thresh = smc%model%T
 
+    if (smc%endog_tempering) then
+       smc%temp = tempering_schedule(nstages=100000, lambda=0.0_wp, max_T=32)
+       smc%temp%T_schedule = 1
+    end if
   end function new_smc
 
   subroutine estimate(self, rank)
@@ -353,6 +357,9 @@ contains
        end if
 
        ! for endogenous tempering wiht multiprocessing
+       call mpi_barrier(MPI_COMM_WORLD, mpierror)
+       call mpi_bcast(i, 1, MPI_DOUBLE_PRECISION, &
+            0, MPI_COMM_WORLD, mpierror)
        call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, &
             0, MPI_COMM_WORLD, mpierror)
        self%temp%phi_schedule(i) = phi
@@ -509,11 +516,14 @@ contains
     end do
 
     if (rank==0) then
-       print*,'Writing Output'
+       print*,''
+       print*,'Finished SMC sampler! Writing output to '//self%output_file
        call self%temp%write_json(json_p)
        call json%print(json_p, self%output_file)
        call json%destroy(json_p)
     end if
+
+    call mpi_barrier(MPI_COMM_WORLD, mpierror)
   end subroutine estimate
 
 
