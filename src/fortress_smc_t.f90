@@ -9,7 +9,7 @@ module fortress_smc_t
   use fortress_random_t, only: fortress_random
   use fortress_linalg, only: cholesky, inverse
   use fortress_util, only: read_array_from_file
-
+  use fortress_constants, only: BAD_LOG_LIKELIHOOD
   use json_module, only: json_core, json_value
   use fortress_info
 
@@ -59,7 +59,6 @@ module fortress_smc_t
 
      integer :: nproc
      integer :: ngap
-
 
      type(fortress_random) :: rng
      type(tempering_schedule) :: temp
@@ -689,19 +688,19 @@ contains
 
        p0 = smc_particles%particles(:,i)
        lik0 = self%model%lik(p0, T=likT)
-       if (isnan(lik0)) lik0 = -10.0_wp**11
+       if (isnan(lik0)) lik0 = BAD_LOG_LIKELIHOOD
 
 
-       if ((lik0 < -10.0_wp**9) .and. (self%init_file /= 'none')) then
+       if ((lik0 <= BAD_LOG_LIKELIHOOD ) .and. (self%init_file /= 'none')) then
           print*,'Error with initial particle files'
           stop
        end if
 
-       do while (lik0 < -10.0_wp**9)
+       do while (lik0 <= BAD_LOG_LIKELIHOOD)
           p0 = paraextra(:,j)
           lik0 = self%model%lik(p0, T=likT)
 
-          if (isnan(lik0)) lik0 = -10000000000000.0_wp
+          if (isnan(lik0)) lik0 = BAD_LOG_LIKELIHOOD
 
           j = j + 1
           if (j > self%npriorextra) then
