@@ -137,6 +137,7 @@ contains
     call smc%cli%get(switch='-b',val=smc%lambda,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-m',val=smc%nintmh,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-i',val=smc%trial,error=err); if (err/=0) stop 1
+    call smc%cli%get(switch='-c',val=smc%initial_c,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-n',val=smc%npart,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-we',val=smc%write_every,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-sh',val=smc%save_hyper,error=err); if (err/=0) stop 1
@@ -222,7 +223,7 @@ contains
 
     real(wp) :: ess_gap1, phi0
 
-    scale = 0.4_wp
+    scale = self%initial_c
     !if (self%endog_tempering) self%resample_tol = 0.0_wp
 
     self%rng = fortress_random(seed=self%seed+rank)
