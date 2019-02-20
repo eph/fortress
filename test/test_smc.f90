@@ -143,14 +143,14 @@ contains
          test_smc%temp%Z_estimates, test_smc%temp%ESS_estimates)
 
     test_smc%temp = tempering_schedule(nstages=5000, lambda=2.0_wp, max_T=80)
-    test_smc%endog_tempering = .true.
-    test_smc%temp%T_schedule = 1
-    test_smc%resample_tol = 0.99_wp
+    ! test_smc%endog_tempering = .true.
+    ! test_smc%temp%T_schedule = 1
+    ! test_smc%resample_tol = 0.99_wp
     call test_smc%estimate(rank)
-
+    print*,'fdsafsaf'
     test_smc%temp = tempering_schedule(nstages=5000, lambda=2.0_wp, max_T=80)
     test_smc%temp%phi_max = 100000000.0_wp
-
+    call mpi_finalize(mpierror)
     !call test_smc%estimate(rank)
 
   end subroutine test_smc_endog_schedule
