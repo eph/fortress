@@ -323,9 +323,9 @@ contains
           call parasim%normalize_weights(self%temp%Z_estimates(i))
           self%temp%ESS_estimates(i) = parasim%ESS()
           print*,'============================================================='
-          write(*,'(A,I4,A,I4)') 'Iteration', i,' of ', self%temp%nstages
-          write(*,'(A,I4,A,F8.4,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
-          write(*,'(A,I4,A,F8.4,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
+          write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
+          write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
+          write(*,'(A,I4,A,F8.5,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
           write(*,'(A,F8.2, A, I8.0)',advance='no')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
           !------------------------------------------------------------
           ! Selection
