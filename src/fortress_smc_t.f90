@@ -4,7 +4,7 @@ module fortress_smc_t
   !use, intrinsic :: ieee_arithmetic, only: isnan => ieee_is_nan 
 
   use flap, only : command_line_interface
-  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
+  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model, fortress_lgss_model
   use fortress_smc_particles_t, only: fortress_smc_particles
   use fortress_random_t, only: fortress_random
   use fortress_linalg, only: cholesky, inverse
@@ -65,7 +65,7 @@ module fortress_smc_t
 
      logical :: endog_tempering
      real(wp) :: resample_tol
-
+     real(wp) :: bisection_thresh
    contains
      procedure :: estimate
      procedure :: draw_from_prior
@@ -148,6 +148,7 @@ contains
     call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
+    call smc%cli%get(switch='-bt',val=smc%bisection_thresh,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err); if(err/=0) stop 1
@@ -170,6 +171,7 @@ contains
     if (smc%endog_tempering) then
        smc%temp = tempering_schedule(nstages=100000, lambda=0.0_wp, max_T=32)
        smc%temp%T_schedule = 1
+       smc%temp%T_schedule = 0
     end if
   end function new_smc
 
@@ -211,6 +213,8 @@ contains
     real(wp) :: p0(self%model%npara), loglh0, loglhold0, prior0
     real(wp) :: likdiff, likdiffold, prdiff, alp
     integer :: nodeuind
+
+    real(wp) :: loglhvec(self%model%T)
 
     character(len=3) :: chart
 
@@ -300,14 +304,14 @@ contains
                 if (current_T == self%model%T) i = self%temp%nstages
              else
                 do while (isnan(ess_gap1))
-                   phi0 = max(phi0 / 2.0_wp, phi_old+0.01_wp)
+                   phi0 = max(phi0 , phi_old+0.01_wp)
                    if (phi0 < phi_old) stop
                    ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
+                   print*,phi0,ess_gap1
                 end do
-                phi = bisection(phi_old, phi0, 0.0001_wp, phi_old, parasim, self%resample_tol)
+                phi = bisection(phi_old, phi0, self%bisection_thresh, phi_old, parasim, self%resample_tol)
              end if
              ess_gap1 = ess_gap(phi, phi_old, parasim, self%resample_tol)
-
              self%temp%phi_schedule(i) = phi
 
           end if
@@ -319,9 +323,10 @@ contains
              parasim%weights(j) = parasim%weights(j) * exp( &
                   (phi - phi_old)*(parasim%loglh(j)-parasim%loglhold(j)) )
           end do
-             
+          
           call parasim%normalize_weights(self%temp%Z_estimates(i))
           self%temp%ESS_estimates(i) = parasim%ESS()
+          
           print*,'============================================================='
           write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
           write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
@@ -334,6 +339,7 @@ contains
           if ((self%temp%ESS_estimates(i) < self%npart * self%resample_tol) &
                .or. (self%endog_tempering)) then
              write(*,'(A)') ' [resampling]'
+             print*,self%temp%ESS_estimates(i), self%npart * 0.5_wp
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
@@ -456,12 +462,24 @@ contains
                 p0 = nodepara%particles(:,j)
                 p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
 
-                loglh0 = self%model%lik(p0, T=current_T)
-                if ( nodepara%loglhold(j) /= 0.0_wp) then
-                   loglhold0 = self%model%lik(p0, T=previous_T)
+                if ( self%endog_tempering .eqv. .true.) then !thennodepara%loglhold(j) /= 0.0_wp) then
+                   select type(mod => self%model )
+                   class is (fortress_lgss_model)
+                      loglhvec(1:current_T) = mod%lik_filter_vec(p0, T=current_T)
+                      loglh0 = sum(loglhvec(1:current_T))
+                      loglhold0 = sum(loglhvec(1:maxval([current_T-1,0])))
+
+                      if ((isnan(loglh0))) loglh0 = BAD_LOG_LIKELIHOOD
+                      if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
+                   class default
+                      loglh0 = mod%lik(p0, T=current_T)
+                      loglhold0 = mod%lik(p0, T=maxval([current_T-1,0]))
+                   end select
                 else
+                   loglh0 = self%model%lik(p0, T=current_T)
                    loglhold0 = 0.0_wp
                 end if
+
                 prior0 = self%model%prior%logpdf(p0)
 
                 likdiff = loglh0 - nodepara%loglh(j)
@@ -470,6 +488,7 @@ contains
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
                 if (nodeu(nodeuind,1) < alp) then
+                   !print*,loglh0,loglhold0,p0,alp
                    nodeacpt(b_ind,j) = nodeacpt(b_ind,j) + 1
                    nodepara%particles(:,j) = p0
                    nodepara%loglh(j) = loglh0
@@ -485,7 +504,7 @@ contains
 
           end do
        end do
-       previous_T = self%temp%T_schedule(i)
+
 
        call mpi_gather(nodeacpt, self%ngap*self%model%npara, MPI_INTEGER, &
             acptsim, self%ngap*self%model%npara, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror )
@@ -619,6 +638,9 @@ contains
          help='Endogenous tempering.')
     call cli%add(switch='--resample-tol', switch_ab='-rt', &
          required=.false.,act='store',def='0.5',error=error, &
+         help='Tolerance for resampling.')
+    call cli%add(switch='--bisection-thresh', switch_ab='-bt', &
+         required=.false.,act='store',def='0.001',error=error, &
          help='Tolerance for resampling.')
     call cli%add(switch='--initial-particles', switch_ab='-pf', &
          required=.false.,act='store',def='none',error=error, &
