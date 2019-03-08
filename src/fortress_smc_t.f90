@@ -5,6 +5,7 @@ module fortress_smc_t
 
   use flap, only : command_line_interface
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model, fortress_lgss_model
+  use fortress_bayesian_model_derivatives_t, only: fortress_abstract_bayesian_model_derivatives
   use fortress_smc_particles_t, only: fortress_smc_particles
   use fortress_random_t, only: fortress_random
   use fortress_linalg, only: cholesky, inverse
@@ -56,6 +57,7 @@ module fortress_smc_t
      logical :: mcmc_mix, conditional_covariance
      integer :: seed
      character(len=200) :: output_file, init_file
+     character(len=200) :: mutation_type 
 
      integer :: nproc
      integer :: ngap
@@ -66,6 +68,8 @@ module fortress_smc_t
      logical :: endog_tempering
      real(wp) :: resample_tol
      real(wp) :: bisection_thresh
+
+     real(wp) :: target_acpt = 0.25_wp
    contains
      procedure :: estimate
      procedure :: draw_from_prior
@@ -149,6 +153,7 @@ contains
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-bt',val=smc%bisection_thresh,error=err); if (err/=0) stop 1
+    call smc%cli%get(switch='-mt',val=smc%mutation_type,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err); if(err/=0) stop 1
@@ -173,6 +178,11 @@ contains
        smc%temp%T_schedule = 1
        smc%temp%T_schedule = 0
     end if
+
+    if (smc%mutation_type=="HMC") then
+       smc%target_acpt = 0.65_wp
+    endif
+
   end function new_smc
 
   subroutine estimate(self, rank)
@@ -226,6 +236,10 @@ contains
     real(wp) :: scale, ahat
 
     real(wp) :: ess_gap1, phi0
+
+    real(wp) :: momemtum(self%model%npara)
+    integer :: i_hmc
+
 
     scale = self%initial_c
     !if (self%endog_tempering) self%resample_tol = 0.0_wp
@@ -428,7 +442,7 @@ contains
        nodeuind = 1
        nodeacpt = 0
        do j = 1, self%ngap
-
+          
           do m = 1, self%nintmh
 
              npara_old = 0
@@ -460,7 +474,26 @@ contains
                 ! call cholesky(block_variance_chol, info)
 
                 p0 = nodepara%particles(:,j)
-                p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
+
+                if (self%mutation_type == "RWMH") then
+                   p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
+                 elseif (self%mutation_type == "HMC") then 
+                    select type (mod => self%model)
+                    class is (fortress_abstract_bayesian_model_derivatives)
+                       momemtum = nodeeps(:,j)
+                       do i_hmc = 1, 10
+                          momemtum = momemtum + scale*(phi*mod%dlik(p0))/2.0_wp
+                          p0 = p0 + scale*momemtum
+                          momemtum = momemtum + scale*(phi*mod%dlik(p0))/2.0_wp
+                       end do
+                       momemtum = -momemtum
+                       momemtum(1) = -0.5*sum(momemtum**2) + 0.5*sum(nodeeps(:,j)**2) 
+                    class default
+                       print*,'ERROR: Cannot do HMC without derivatives!'
+                       stop
+                    end select
+                end if
+
 
                 if ( self%endog_tempering .eqv. .true.) then !thennodepara%loglhold(j) /= 0.0_wp) then
                    select type(mod => self%model )
@@ -487,6 +520,11 @@ contains
                 prdiff = prior0 - nodepara%prior(j)
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
+                if (self%mutation_type == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum(1))
+
+                if (.not.(self%model%inbounds(p0))) alp = 0.0_wp
+
+
                 if (nodeu(nodeuind,1) < alp) then
                    !print*,loglh0,loglhold0,p0,alp
                    nodeacpt(b_ind,j) = nodeacpt(b_ind,j) + 1
@@ -503,6 +541,8 @@ contains
              end do
 
           end do
+
+
        end do
 
 
@@ -513,12 +553,13 @@ contains
        if (rank == 0) then
 
           ahat = sum(acptsim) / (1.0_wp * self%npart * self%nintmh * self%model%npara)
-          scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - 0.25_wp)) &
-               / (1.0_wp + exp(16.0_wp*(ahat - 0.25_wp))))
+          scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - self%target_acpt)) &
+               / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
           write(*,'(A,F4.2,A,F5.3,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
           write(*,'(A,F 8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
           write(*,'(A,F 8.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
           write(*,'(A,F 8.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
+
           if ((phi == 1.0_wp) .and. (current_T >= self%T_write_thresh) )then
              write(chart, '(I3.3)') current_T
              call json%create_object(json_ip,'posterior.'//trim(chart))
@@ -602,6 +643,8 @@ contains
          required=.false.,act='store',def='4800', error=error)
     call cli%add(switch='--nphi', switch_ab='-p', help='Number of stages (integer)', &
          required=.false.,act='store',def='500', error=error)
+    call cli%add(switch='--mutation-type', switch_ab='-mt', help='Mutation Type', &
+         required=.false.,act='store',def='RWMH', error=error)
     call cli%add(switch='--bend', switch_ab='-b', help='Lambda coefficient (float)', &
          required=.false.,act='store',def='2.0', error=error)
     call cli%add(switch='--nintmh', switch_ab='-m', help='Number of MH steps (integer)', &
@@ -786,6 +829,12 @@ contains
     else
        u = rvs
     end if
+
+    if (nblocks == 1) then
+       break_points = [0,npara]
+       return
+    endif
+    
 
     call rperm3(npara, ind2, u)
 
