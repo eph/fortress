@@ -5,11 +5,11 @@ module fortress_smc_t
 
   use flap, only : command_line_interface
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model, fortress_lgss_model
-  use fortress_bayesian_model_derivatives_t, only: fortress_abstract_bayesian_model_derivatives
+  use fortress_prior_t, only: logmvnormpdf
   use fortress_smc_particles_t, only: fortress_smc_particles
   use fortress_random_t, only: fortress_random
   use fortress_linalg, only: cholesky, inverse
-  use fortress_util, only: read_array_from_file
+  use fortress_util, only: read_array_from_file, write_array_to_file
   use fortress_constants, only: BAD_LOG_LIKELIHOOD
   use json_module, only: json_core, json_value
   use fortress_info
@@ -57,7 +57,9 @@ module fortress_smc_t
      logical :: mcmc_mix, conditional_covariance
      integer :: seed
      character(len=200) :: output_file, init_file
+
      character(len=200) :: mutation_type 
+     integer :: L 
 
      integer :: nproc
      integer :: ngap
@@ -152,6 +154,7 @@ contains
     call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
+    call smc%cli%get(switch='-L',val=smc%L,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-bt',val=smc%bisection_thresh,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-mt',val=smc%mutation_type,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
@@ -237,9 +240,10 @@ contains
 
     real(wp) :: ess_gap1, phi0
 
-    real(wp) :: momemtum(self%model%npara)
+    real(wp) :: momemtum(self%model%npara), zeros_vec(self%model%npara), momemtum_dens_diff
     integer :: i_hmc
 
+    zeros_vec = 0.0_wp
 
     scale = self%initial_c
     !if (self%endog_tempering) self%resample_tol = 0.0_wp
@@ -438,6 +442,37 @@ contains
           deallocate(b_ind, block_variance_chol)
        end do
 
+       if (self%mutation_type(1:3) == "HMC") then
+ 
+          if (self%mutation_type == 'HMC-diagM') then 
+             chol_var = 0.0_wp
+             do j = 1,self%model%npara
+                chol_var(j,j) =    variance(j,j) 
+             end do
+             variance = chol_var
+          elseif (self%mutation_type == 'HMC-M') then
+             chol_var = variance
+          elseif (self%mutation_type == 'HMC-I') then
+             chol_var = 0.0_wp
+             variance = 0.0_wp
+             do j = 1,self%model%npara
+                chol_var(j,j) = 1.0_wp
+                variance(j,j) = 1.0_wp
+             end do
+          else
+             chol_var = 0.0_wp
+             do j = 1,self%model%npara
+                chol_var(j,j) =    variance(j,j) 
+             end do
+          end if
+
+          call inverse(chol_var, info)
+          call cholesky(chol_var, info)
+          
+
+       end if
+          
+
 
        nodeuind = 1
        nodeacpt = 0
@@ -451,47 +486,23 @@ contains
                 allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
                 b_ind = ind(break_points(bj)+1:break_points(bj+1))
 
-                block_variance_chol = chol_var(b_ind, b_ind)
-                ! block_variance_chol = variance(b_ind, b_ind)
-                ! if (self%conditional_covariance .and. (self%nblocks>1)) then
-
-                !    rest_ind = pack([ (jj, jj = 1,self%model%npara )], &
-                !         [( (any(b_ind(:) == jj)), jj = 1,self%model%npara)].eqv..false.)
-                !    restsize = self%model%npara-bsize
-                !    allocate(other_var(restsize,restsize), &
-                !         temp(bsize,restsize))
-
-                !    other_var = variance(rest_ind, rest_ind)
-                !    call inverse(other_var, info)
-
-                !    call dgemm('n','n',bsize,restsize,restsize,1.0_wp, variance(b_ind, rest_ind), bsize, &
-                !         other_var, restsize, 0.0_wp, temp, bsize)
-                !    call dgemm('n','n',bsize,bsize,restsize, -1.0_wp, temp, bsize, &
-                !         variance(rest_ind, b_ind), restsize, 1.0_wp, block_variance_chol, bsize)
-
-                ! end if
-
-                ! call cholesky(block_variance_chol, info)
+                block_variance_chol = chol_var(b_ind, b_ind) 
 
                 p0 = nodepara%particles(:,j)
 
                 if (self%mutation_type == "RWMH") then
                    p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
-                 elseif (self%mutation_type == "HMC") then 
-                    select type (mod => self%model)
-                    class is (fortress_abstract_bayesian_model_derivatives)
-                       momemtum = nodeeps(:,j)
-                       do i_hmc = 1, 10
-                          momemtum = momemtum + scale*(phi*mod%dlik(p0))/2.0_wp
-                          p0 = p0 + scale*momemtum
-                          momemtum = momemtum + scale*(phi*mod%dlik(p0))/2.0_wp
-                       end do
-                       momemtum = -momemtum
-                       momemtum(1) = -0.5*sum(momemtum**2) + 0.5*sum(nodeeps(:,j)**2) 
-                    class default
-                       print*,'ERROR: Cannot do HMC without derivatives!'
-                       stop
-                    end select
+                 elseif (self%mutation_type(1:3) == "HMC") then 
+                    call dgemv('N', self%model%npara, self%model%npara, 1.0_wp, chol_var, self%model%npara, nodeeps(:,j), 1, 0.0_wp, momemtum, 1)
+                    do i_hmc = 1, self%L
+                       momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
+                       call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
+                       momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    end do
+
+                    momemtum = -momemtum
+                    momemtum_dens_diff = logmvnormpdf(momemtum, zeros_vec, chol_var) &
+                         - logmvnormpdf(matmul(chol_var, nodeeps(:,j)), zeros_vec, chol_var)
                 end if
 
 
@@ -516,12 +527,12 @@ contains
                 prior0 = self%model%prior%logpdf(p0)
 
                 likdiff = loglh0 - nodepara%loglh(j)
+
                 likdiffold = loglhold0 - nodepara%loglhold(j)
                 prdiff = prior0 - nodepara%prior(j)
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
-                if (self%mutation_type == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum(1))
-
+                if (self%mutation_type(1:3) == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum_dens_diff)
                 if (.not.(self%model%inbounds(p0))) alp = 0.0_wp
 
 
@@ -551,10 +562,12 @@ contains
        call gather_particles(parasim, nodepara)
 
        if (rank == 0) then
-
           ahat = sum(acptsim) / (1.0_wp * self%npart * self%nintmh * self%model%npara)
-          scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - self%target_acpt)) &
+          ! scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - self%target_acpt)) &
+          !      / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
+          scale = scale * (0.85_wp + 0.30*exp(16.0_wp*(ahat - self%target_acpt)) &
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
+
           write(*,'(A,F4.2,A,F5.3,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
           write(*,'(A,F 8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
           write(*,'(A,F 8.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
@@ -691,6 +704,11 @@ contains
     call cli%add(switch='--npriorextra', switch_ab='-pe', &
          help='Number of extra draws from prior (integer)', &
          required=.false.,act='store',def='1000', error=error)
+    call cli%add(switch='--HMCL', switch_ab='-L', &
+         help='Steps for hmc', &
+         required=.false.,act='store',def='10', error=error)
+
+
     call cli%add(switch='--T-write-thresh', switch_ab='-twt', &
          help='T to start writing posterior at', &
          required=.false.,act='store',def='-1', error=error)

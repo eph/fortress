@@ -34,6 +34,7 @@ module fortress_bayesian_model_t
 
      procedure :: read_data
      procedure(lik_func), deferred :: lik
+     procedure :: dlik
      procedure :: inbounds
      !final :: finalize
      procedure :: construct_abstract_bayesian_model
@@ -321,6 +322,23 @@ real(wp) function lik_filter(self, para, T) result(l)
 
 
 end function
+
+function dlik(self, para, T) result(dl)
+
+  class(fortress_abstract_bayesian_model), intent(inout) :: self
+  real(wp), intent(in) :: para(self%npara)
+  integer, intent(in), optional :: T
+
+  real(wp) :: dl(self%npara)
+  
+  print*,'dlik not implemented!'
+  stop
+
+
+end function dlik
+
+
+
 double precision function pdfy_lgss(m, t, states_new, states_old, para) result(pdf)
     class(fortress_lgss_model), intent(inout) :: m 
 

@@ -20,7 +20,7 @@ module fortress_prior_t
    contains
      procedure(rvs_interface), deferred :: rvs
      procedure(logpdf_interface), deferred :: logpdf
-
+     procedure :: dlogpdf
   end type fortress_abstract_prior
 
   interface fortress_abstract_prior
@@ -39,7 +39,7 @@ module fortress_prior_t
      function logpdf_interface(self, para) result(lpdf)
        use, intrinsic :: iso_fortran_env, only: wp => real64
        import fortress_abstract_prior
-       
+
        class(fortress_abstract_prior), intent(inout) :: self
        real(wp), intent(in) :: para(self%npara)
        real(wp) :: lpdf
@@ -87,7 +87,7 @@ contains
 
     character(len=*), intent(in) :: frankfile
 
-    
+
     open(PRIOR_FILE_UNIT, file=frankfile)
     nlines = 0
 
@@ -133,7 +133,17 @@ contains
 
     close(PRIOR_FILE_UNIT)
   end function new_prior
- 
+
+  function dlogpdf(self, para) result (dl)
+    class(fortress_abstract_prior), intent(inout) :: self
+    real(wp), intent(in) :: para(self%npara)
+
+    real(wp) :: dl(self%npara)
+
+    dl = -10000.0_wp
+  end function dlogpdf
+
+
   logical function inbounds(self, para)
     class(prior), intent(inout) :: self
     real(wp), intent(in) :: para(self%npara)
@@ -292,6 +302,40 @@ contains
          -(b+1.0d0)/2.0d0*log(x**2) - b*a**2.0/(2.0d0*x**2)
 
   end function logigpdf
+
+
+    function logmvnormpdf(x, mu, chol_sigma) result(logq)
+    !! Computes the log of the n-dimensional multivariate normal pdf at x
+    !! with mean mu and variance = chol_sigma*chol_sigma'.
+    !!
+    real(wp), intent(in) :: x(:), mu(:), chol_sigma(:,:)
+    real(wp), external :: ddot
+
+    real(wp) :: logq
+    real(wp) :: a(size(x, 1)), det_sigma
+
+    integer :: n, i
+    n = size(x, 1)
+
+    if (n /= size(mu, 1)) then
+       print*, 'mvnormal pdf, size error'
+       stop
+    endif
+
+    det_sigma = 1.0_wp
+
+    do i = 1, n
+
+       det_sigma = det_sigma*chol_sigma(i,i)
+
+    end do
+    det_sigma = det_sigma**2
+    a = x - mu
+    call dtrsv('l','n', 'n', n, chol_sigma, n, a, 1)
+
+    logq = -n*0.5_wp*log(2.0_wp*3.14159_wp) - 0.5_wp*log(det_sigma) - 0.5*ddot(n, a, 1, a, 1)
+
+  end function logmvnormpdf
 
 
 end module fortress_prior_t

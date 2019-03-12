@@ -2,12 +2,12 @@ module test_model_circle_t
   use, intrinsic :: iso_fortran_env, only: wp => real64
 
   use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
-  use fortress_bayesian_model_derivatives_t, only: fortress_abstract_bayesian_model_derivatives, test
+  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model, test
 
   implicit none
 
   
-  type, public, extends(fortress_abstract_bayesian_model_derivatives) :: model
+  type, public, extends(fortress_abstract_bayesian_model) :: model
      real(wp) :: PSI = 5000.0_wp
 
     contains
@@ -42,8 +42,6 @@ contains
     !call self%construct_model(name, datafile, priorfile, npara, nobs, T, ns, neps)
 
     self%p0 = [1.26300312_wp, 1.95483334_wp]
-
-
 
   end function new_model
 

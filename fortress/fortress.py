@@ -4,6 +4,7 @@ import subprocess
 import json
 import tqdm
 import pandas as p
+import glob
 my_env = os.environ.copy()
 my_env['OPENBLAS_NUM_THREADS'] = '1'
 
@@ -18,6 +19,43 @@ else:
     inc_path = '$(ANACONDA_PATH)/../include'
     lib_path = '$(ANACONDA_PATH)/../lib'
 
+
+def load_estimates(file_string, resample=True, paranames=None, posterior='final'):
+
+    output_files = glob.glob(file_string)
+
+    results = []
+    for f in output_files:
+        output_json = json.loads(open(f).read())
+
+        posteriors = sorted([k for k in output_json.keys() if k.startswith('posterio')])
+
+        if posterior=='final': 
+            to_load = posteriors[-1]
+        elif posterior=='prior':
+            to_load = 'posterior.001'
+        else:
+            to_load = posterior
+
+        res = p.DataFrame(output_json[to_load])
+      
+        if resample:
+            inds = np.random.choice(res.shape[0], size=res.shape[0], p=res.weights)
+            res = res.iloc[inds].reset_index()
+      
+        if paranames is not None:
+            vs = [c for c in res.columns in res.startswith('var')]
+            res = res.rename(columns=dict(zip(vs,paranames)))
+          
+        res['logmdd'] = np.log(output_json['Z_estimates']).sum()
+      
+        results.append(res)
+    if len(output_files) == 1:
+        return results[0]
+    else:
+        return p.concat(results, axis=0, keys=output_files)
+    
+    
 
 #my_env['LD_LIBRARY_PATH']='/home/eherbst/Dropbox/code/fortress'
 
