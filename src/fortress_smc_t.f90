@@ -117,10 +117,10 @@ contains
     !type(json_value), pointer :: json_temp
     type(json_core) :: json
 
-    call json%add(json_node, 'tempering_phi', self%phi_schedule)
-    call json%add(json_node, 'tempering_T', self%T_schedule)
-    call json%add(json_node, 'Z_estimates', self%Z_estimates)
-    call json%add(json_node, 'ESS_estimates', self%ESS_estimates)
+    call json%add(json_node, 'tempering_phi', self%phi_schedule(1:self%nstages))
+    call json%add(json_node, 'tempering_T', self%T_schedule(1:self%nstages))
+    call json%add(json_node, 'Z_estimates', self%Z_estimates(1:self%nstages))
+    call json%add(json_node, 'ESS_estimates', self%ESS_estimates(1:self%nstages))
 
   end subroutine write_json
 
@@ -182,7 +182,7 @@ contains
        smc%temp%T_schedule = 0
     end if
 
-    if (smc%mutation_type=="HMC") then
+    if (smc%mutation_type(1:3)=="HMC") then
        smc%target_acpt = 0.65_wp
     endif
 
@@ -212,7 +212,7 @@ contains
     type(fortress_smc_particles) :: parasim, nodepara
     integer :: acptsim(self%model%npara, self%npart)
 
-    real(wp) :: nodeeps(self%model%npara * self%nintmh,self%ngap)
+    real(wp) :: nodeeps(self%model%npara ,self%ngap*self%nintmh)
     real(wp) :: nodeu(self%ngap*self%nblocks * self%nintmh, 1)
     integer :: nodeacpt(self%model%npara,self%ngap)
     real(wp) :: nodeloglh(self%ngap), nodepriorsim(self%ngap)
@@ -225,7 +225,7 @@ contains
 
     real(wp) :: p0(self%model%npara), loglh0, loglhold0, prior0
     real(wp) :: likdiff, likdiffold, prdiff, alp
-    integer :: nodeuind
+    integer :: nodeuind, nodemind
 
     real(wp) :: loglhvec(self%model%T)
 
@@ -240,8 +240,11 @@ contains
 
     real(wp) :: ess_gap1, phi0
 
-    real(wp) :: momemtum(self%model%npara), zeros_vec(self%model%npara), momemtum_dens_diff
+    real(wp) :: momemtum(self%model%npara), zeros_vec(self%model%npara), momemtum_dens_diff, scale_rand, momemtum0(self%model%npara)
     integer :: i_hmc
+
+     real(wp) :: old_particles(self%model%npara, self%npart), mu_old, mu_new, sig_old, sig_new, average_corr(self%model%npara)
+
 
     zeros_vec = 0.0_wp
 
@@ -319,7 +322,7 @@ contains
 
              if (ess_gap1 > 0.0_wp) then
                 phi = self%temp%phi_max
-                if (current_T == self%model%T) i = self%temp%nstages
+                if (current_T == self%model%T) self%temp%nstages = i
              else
                 do while (isnan(ess_gap1))
                    phi0 = max(phi0 , phi_old+0.01_wp)
@@ -354,8 +357,8 @@ contains
           ! Selection
           !------------------------------------------------------------
           !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
-          if ((self%temp%ESS_estimates(i) < self%npart * self%resample_tol) &
-               .or. (self%endog_tempering)) then
+          if (self%temp%ESS_estimates(i) < self%npart * 0.5_wp) then !self%resample_tol) &
+             !.or. (self%endog_tempering)) then
              write(*,'(A)') ' [resampling]'
              print*,self%temp%ESS_estimates(i), self%npart * 0.5_wp
              call parasim%systematic_resampling(uu(i,1), resample_ind)
@@ -368,7 +371,7 @@ contains
              print*, ''
           end if
 
-          eps = self%rng%norm_rvs(self%model%npara*self%nintmh, self%npart)
+          eps = self%rng%norm_rvs(self%model%npara, self%npart*self%nintmh)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
           write(*,'(A)') '             mu    std'
@@ -379,12 +382,13 @@ contains
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
+          old_particles = parasim%particles
 
        end if
 
        ! for endogenous tempering wiht multiprocessing
        call mpi_barrier(MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(i, 1, MPI_DOUBLE_PRECISION, &
+       call mpi_bcast(self%temp%nstages, 1, MPI_DOUBLE_PRECISION, &
             0, MPI_COMM_WORLD, mpierror)
        call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, &
             0, MPI_COMM_WORLD, mpierror)
@@ -468,14 +472,17 @@ contains
 
           call inverse(chol_var, info)
           call cholesky(chol_var, info)
-          
+
+
 
        end if
           
 
 
        nodeuind = 1
+       nodemind = 1
        nodeacpt = 0
+
        do j = 1, self%ngap
           
           do m = 1, self%nintmh
@@ -491,18 +498,20 @@ contains
                 p0 = nodepara%particles(:,j)
 
                 if (self%mutation_type == "RWMH") then
-                   p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,j))
+                   p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,nodemind))
                  elseif (self%mutation_type(1:3) == "HMC") then 
-                    call dgemv('N', self%model%npara, self%model%npara, 1.0_wp, chol_var, self%model%npara, nodeeps(:,j), 1, 0.0_wp, momemtum, 1)
-                    do i_hmc = 1, self%L
-                       momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
-                       call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
-                       momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
-                    end do
+                    call dgemv('N', self%model%npara, self%model%npara, 1.0_wp, chol_var, self%model%npara, nodeeps(b_ind,nodemind), 1, 0.0_wp, momemtum0, 1)
 
+                    momemtum = momemtum0 + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    do i_hmc = 1, self%L
+                       call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
+                       if (i_hmc < self%L) momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))
+                       
+                    end do
+                    momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
                     momemtum = -momemtum
                     momemtum_dens_diff = logmvnormpdf(momemtum, zeros_vec, chol_var) &
-                         - logmvnormpdf(matmul(chol_var, nodeeps(:,j)), zeros_vec, chol_var)
+                         - logmvnormpdf(momemtum0, zeros_vec, chol_var)
                 end if
 
 
@@ -517,7 +526,7 @@ contains
                       if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
                    class default
                       loglh0 = mod%lik(p0, T=current_T)
-                      loglhold0 = mod%lik(p0, T=maxval([current_T-1,0]))
+                      loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
                    end select
                 else
                    loglh0 = self%model%lik(p0, T=current_T)
@@ -550,6 +559,7 @@ contains
                 npara_old = npara_old + bsize
                 nodeuind = nodeuind + 1
              end do
+             nodemind = nodemind + 1
 
           end do
 
@@ -563,12 +573,13 @@ contains
 
        if (rank == 0) then
           ahat = sum(acptsim) / (1.0_wp * self%npart * self%nintmh * self%model%npara)
-          ! scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - self%target_acpt)) &
-          !      / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
-          scale = scale * (0.85_wp + 0.30*exp(16.0_wp*(ahat - self%target_acpt)) &
+          !scale = scale * (0.95_wp + 0.10*exp(16.0_wp*(ahat - self%target_acpt)) &
+          !     / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
+          scale = scale * (0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
-
-          write(*,'(A,F4.2,A,F5.3,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
+          print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
+               / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
+          write(*,'(A,F4.2,A,F8.4,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
           write(*,'(A,F 8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
           write(*,'(A,F 8.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
           write(*,'(A,F 8.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
@@ -580,12 +591,36 @@ contains
              call parasim%write_json(json_ip)
              nullify(json_ip)
           end if
+
+          do j = 1, self%model%npara
+          
+             mu_old = sum(old_particles(j,:))/self%npart
+             sig_old = sum( (old_particles(j,:)-mu_old)**2)/self%npart
+          
+             mu_new = sum(parasim%particles(j,:))/self%npart
+             sig_new = sum( (parasim%particles(j,:)-mu_new)**2)/self%npart
+          
+             average_corr(j) = (sum(old_particles(j,:) * parasim%particles(j,:))/self%npart - mu_old*mu_new) / sqrt(sig_new * sig_old)
+          end do
+          
+          print*,minval(average_corr), maxval(average_corr)
+          
+          ! if ((maxval(average_corr) > 0.75_wp)) then
+          !    self%L = floor(self%L * 1.25_wp)
+          !    !scale = scale * 1.1_wp
+          ! elseif (maxval(average_corr) < 0.25_wp) then 
+          !    self%L = floor(self%L * 0.75_wp)+1
+          ! end if
+          ! self%L = min(self%L, 100)
+          ! print*,self%L
+
        end if
 
        if ((self%endog_tempering) .and. (phi == 1.0_wp)) then
           self%temp%T_schedule(i+1:self%temp%nstages) = current_T + 1
        end if
        call mpi_bcast(scale, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       !call mpi_bcast(self%L, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
        call mpi_barrier(MPI_COMM_WORLD, mpierror)
 
        i = i + 1
@@ -884,14 +919,14 @@ contains
     real(wp) ::  max1, max2
     !nw = fortress_smc_particles(npart=parasim%npart)
     !nw%weights = exp( (phi - phi_old) * parasim%loglh) !* nw%weights
-    new_weight = (phi-phi_old)*(parasim%loglh - parasim%loglhold)
-    new_weight2 = 2.0_wp*(phi-phi_old)*(parasim%loglh- parasim%loglhold)
+    new_weight = (phi-phi_old)*(parasim%loglh - parasim%loglhold) 
+    new_weight2 = 2.0_wp*(phi-phi_old)*(parasim%loglh- parasim%loglhold) 
 
     max1 = maxval(new_weight)
     max2 = maxval(new_weight2)
 
-    a1 = sum(exp(new_weight2-max2)) * parasim%npart
-    a2 = sum(exp(new_weight-max1))**2
+    a1 = sum(exp(new_weight2-max2)*parasim%weights) 
+    a2 = sum(exp(new_weight-max1)*parasim%weights)**2 
 
     f = exp(max2-2.0_wp*max1)*a2/a1  - r
 
