@@ -2,7 +2,7 @@ SRC=src
 TEST=test
 VPATH=.:$(SRC):$(TEST):$(SRC)/external
 
-LIBOBJS=fortress_info.o fortress_constants.o fortress_util.o fortress_linalg.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o filter.o fortress_model_t.o fortress_VAR_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_t.o gensys.o 
+LIBOBJS=fortress_info.o fortress_constants.o fortress_util.o fortress_linalg.o randlib.o fortress_random_t.o as63.o fortress_prior_t.o filter.o fortress_model_t.o fortress_VAR_t.o fortress_particles_t.o fortress_smc_particles_t.o fortress_particle_filter.o fortress_smc_utilities.o fortress_smc_t.o gensys.o 
 
 
 # ifeq ($(FC), ifort)

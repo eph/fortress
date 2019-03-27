@@ -11,6 +11,7 @@ module fortress_smc_t
   use fortress_linalg, only: cholesky, inverse
   use fortress_util, only: read_array_from_file, write_array_to_file
   use fortress_constants, only: BAD_LOG_LIKELIHOOD
+  use fortress_smc_utilities, only: generate_random_blocks, ess_gap, bisection
   use json_module, only: json_core, json_value
   use fortress_info
 
@@ -68,9 +69,10 @@ module fortress_smc_t
      type(tempering_schedule) :: temp
 
      logical :: endog_tempering
+     logical :: resample_every_period
+     
      real(wp) :: resample_tol
      real(wp) :: bisection_thresh
-
      real(wp) :: target_acpt = 0.25_wp
    contains
      procedure :: estimate
@@ -152,6 +154,7 @@ contains
     call smc%cli%get(switch='-s',val=smc%seed,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-nb',val=smc%nblocks,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
+    call smc%cli%get(switch='-rep',val=smc%resample_every_period,error=err); if (err /=0) stop 1
     call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
     call smc%cli%get(switch='-L',val=smc%L,error=err); if (err/=0) stop 1
@@ -177,9 +180,15 @@ contains
     if (smc%T_write_thresh == -1) smc%T_write_thresh = smc%model%T
 
     if (smc%endog_tempering) then
+       print*,'Using endogenous tempering (on full sample only).'
        smc%temp = tempering_schedule(nstages=100000, lambda=0.0_wp, max_T=32)
-       smc%temp%T_schedule = 1
-       smc%temp%T_schedule = 0
+       select type(mod => smc%model )
+       class is (fortress_lgss_model)
+          smc%temp%T_schedule = mod%T
+       class default
+          smc%temp%T_schedule = mod%T
+       end select
+       smc%temp%phi_schedule = 0.0_wp
     end if
 
     if (smc%mutation_type(1:3)=="HMC") then
@@ -357,10 +366,10 @@ contains
           ! Selection
           !------------------------------------------------------------
           !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
-          if (self%temp%ESS_estimates(i) < self%npart * 0.5_wp) then !self%resample_tol) &
+          if ((self%temp%ESS_estimates(i) < self%npart * 0.5_wp) .or. &
+              (self%resample_every_period .eqv. .true.))then 
              !.or. (self%endog_tempering)) then
              write(*,'(A)') ' [resampling]'
-             print*,self%temp%ESS_estimates(i), self%npart * 0.5_wp
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
@@ -411,13 +420,13 @@ contains
        !------------------------------------------------------------
        ! mutation
        !------------------------------------------------------------
+       !call generate_subblock_cholesky(self%npara, self%nblocks, break_points, variance, chol_var)
+       
        chol_var = 0.0_wp
        do bj = 1, self%nblocks
           bsize = break_points(bj+1) - break_points(bj)
           allocate(b_ind(bsize), block_variance_chol(bsize,bsize))
           b_ind = ind(break_points(bj)+1:break_points(bj+1))
-
-
           block_variance_chol = variance(b_ind, b_ind)
           if (self%conditional_covariance .and. (self%nblocks>1)) then
              restsize = self%model%npara-bsize
@@ -724,6 +733,9 @@ contains
     call cli%add(switch='--conditional-covariance', switch_ab='-cc', &
          required=.false.,act='store_true',def='.false.',error=error, &
          help='Conditional covariance.')
+    call cli%add(switch='--resample-every-period', switch_ab='-rep', &
+         required=.false.,act='store_true',def='.false.',error=error, &
+         help='Resample every period')
     call cli%add(switch='--endog-tempering', switch_ab='-et', &
          required=.false.,act='store_true',def='.false.',error=error, &
          help='Endogenous tempering.')
@@ -799,7 +811,7 @@ contains
     j = 1
 
 
-    paraextra = self%model%prior%rvs(self%npriorextra)
+    paraextra = self%model%prior%rvs(self%npriorextra, rng=self%rng)
 
 
     neval = smc_particles%npart
@@ -840,137 +852,6 @@ contains
   end subroutine draw_from_prior
 
 
-  subroutine rperm3(N, p, u)
-
-    integer, intent(in) :: N
-    integer, dimension(N), intent(out) :: p
-    real(wp), intent(in) :: u(N)
-    integer :: j, k
-
-
-    p = 0
-
-    do j=1,N
-
-       !call random_number(u)
-       k = floor(j*u(j)) + 1
-
-       p(j) = p(k)
-       p(k) = j
-
-    end do
-
-  end subroutine rperm3
-
-  subroutine generate_random_blocks(npara, nblocks, indices, break_points, rvs)
-
-    integer, intent(in) :: npara, nblocks
-
-    integer, intent(inout) :: indices(npara)
-    integer, intent(out) ::  break_points(nblocks+1)
-
-    real(wp), intent(in), optional :: rvs(npara)
-
-    real(wp) :: u(npara)
-    integer :: ind2(npara)
-    integer :: i, gap
-
-    if (.not. (present(rvs))) then
-       do i = 1,npara
-          call random_number(u(i))
-       end do
-    else
-       u = rvs
-    end if
-
-    if (nblocks == 1) then
-       break_points = [0,npara]
-       return
-    endif
-    
-
-    call rperm3(npara, ind2, u)
-
-    indices(ind2) = indices
-
-    gap = int(1.0_wp*npara / nblocks)
-
-    do i = 2, nblocks
-       break_points(i) = (i-1)*gap
-
-    end do
-
-    break_points(1) = 0
-    break_points(nblocks+1) = npara
-
-
-  end subroutine generate_random_blocks
-
-
-  real(wp) function ess_gap(phi, phi_old, parasim, r) result(f)
-
-    real(wp), intent(in) :: phi, phi_old, r
-    type(fortress_smc_particles) :: parasim
-
-    !type(fortress_smc_particles) :: nw
-
-    real(wp) :: ESS, temp, a1, a2
-    real(wp) :: new_weight(parasim%npart), new_weight2(parasim%npart)
-    real(wp) ::  max1, max2
-    !nw = fortress_smc_particles(npart=parasim%npart)
-    !nw%weights = exp( (phi - phi_old) * parasim%loglh) !* nw%weights
-    new_weight = (phi-phi_old)*(parasim%loglh - parasim%loglhold) 
-    new_weight2 = 2.0_wp*(phi-phi_old)*(parasim%loglh- parasim%loglhold) 
-
-    max1 = maxval(new_weight)
-    max2 = maxval(new_weight2)
-
-    a1 = sum(exp(new_weight2-max2)*parasim%weights) 
-    a2 = sum(exp(new_weight-max1)*parasim%weights)**2 
-
-    f = exp(max2-2.0_wp*max1)*a2/a1  - r
-
-  end function ess_gap
-
-
-    double precision function bisection(lb1, ub1, tol, phi_old, parasim, rstar)
-
-      double precision, intent(in) :: lb1, ub1, tol, phi_old, rstar
-      type(fortress_smc_particles) :: parasim
-
-      logical :: bisection_converged
-      integer :: bisection_loops
-
-      double precision :: x1, essx, lb, ub
-
-      lb = lb1
-      ub = ub1
-      x1 = (lb+ub)/2
-      essx =  ess_gap(x1, phi_old, parasim, rstar)
-      bisection_converged = abs(essx) < tol
-      bisection_loops = 1
-      do while (.not. bisection_converged)
-
-         if (essx < 0.0) then
-            ub = x1
-            x1 = (x1 + lb) / 2.0d0
-         else
-            lb = x1
-            x1 = (x1 + ub) / 2.0d0
-         endif
-
-         essx =  ess_gap(x1, phi_old, parasim, rstar)
-
-         bisection_converged = abs(essx) < tol
-         bisection_loops = bisection_loops + 1
-
-
-
-      end do
-      !print*,bisection_loops
-      bisection = x1
-
-    end function bisection
 
 
 end module fortress_smc_t
