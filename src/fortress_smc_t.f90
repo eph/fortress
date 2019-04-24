@@ -460,7 +460,7 @@ contains
           if (self%mutation_type == 'HMC-diagM') then 
              chol_var = 0.0_wp
              do j = 1,self%model%npara
-                chol_var(j,j) =    variance(j,j) 
+                chol_var(j,j) = variance(j,j) 
              end do
              variance = chol_var
           elseif (self%mutation_type == 'HMC-M') then
@@ -475,14 +475,13 @@ contains
           else
              chol_var = 0.0_wp
              do j = 1,self%model%npara
-                chol_var(j,j) =    variance(j,j) 
+                chol_var(j,j) = variance(j,j) 
              end do
+             variance = chol_var
           end if
 
           call inverse(chol_var, info)
           call cholesky(chol_var, info)
-
-
 
        end if
           
@@ -524,27 +523,28 @@ contains
                 end if
 
 
-                if ( self%endog_tempering .eqv. .true.) then !thennodepara%loglhold(j) /= 0.0_wp) then
-                   select type(mod => self%model )
-                   class is (fortress_lgss_model)
-                      loglhvec(1:current_T) = mod%lik_filter_vec(p0, T=current_T)
-                      loglh0 = sum(loglhvec(1:current_T))
-                      loglhold0 = sum(loglhvec(1:maxval([current_T-1,0])))
+                ! if ( self%endog_tempering .eqv. .true.) then !thennodepara%loglhold(j) /= 0.0_wp) then
+                !    select type(mod => self%model )
+                !    class is (fortress_lgss_model)
+                !       loglhvec(1:current_T) = mod%lik_filter_vec(p0, T=current_T)
+                !       loglh0 = sum(loglhvec(1:current_T))
+                !       loglhold0 = sum(loglhvec(1:maxval([current_T-1,0])))
 
-                      if ((isnan(loglh0))) loglh0 = BAD_LOG_LIKELIHOOD
-                      if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
-                   class default
-                      loglh0 = mod%lik(p0, T=current_T)
-                      loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
-                   end select
-                else
+                !       if ((isnan(loglh0))) loglh0 = BAD_LOG_LIKELIHOOD
+                !       if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
+                !    class default
+                !       loglh0 = mod%lik(p0, T=current_T)
+                !       loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
+                !    end select
+                ! else
                    loglh0 = self%model%lik(p0, T=current_T)
                    loglhold0 = 0.0_wp
-                end if
+                !end if
 
                 prior0 = self%model%prior%logpdf(p0)
 
                 likdiff = loglh0 - nodepara%loglh(j)
+
 
                 likdiffold = loglhold0 - nodepara%loglhold(j)
                 prdiff = prior0 - nodepara%prior(j)
@@ -589,9 +589,9 @@ contains
           print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
           write(*,'(A,F4.2,A,F8.4,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
-          write(*,'(A,F 8.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
-          write(*,'(A,F 8.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
-          write(*,'(A,F 8.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
+          write(*,'(A,F 10.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
+          write(*,'(A,F 10.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
+          write(*,'(A,F 10.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
 
           if ((phi == 1.0_wp) .and. (current_T >= self%T_write_thresh) )then
              write(chart, '(I3.3)') current_T
@@ -754,8 +754,6 @@ contains
     call cli%add(switch='--HMCL', switch_ab='-L', &
          help='Steps for hmc', &
          required=.false.,act='store',def='10', error=error)
-
-
     call cli%add(switch='--T-write-thresh', switch_ab='-twt', &
          help='T to start writing posterior at', &
          required=.false.,act='store',def='-1', error=error)

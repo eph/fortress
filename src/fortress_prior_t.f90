@@ -73,6 +73,7 @@ module fortress_prior_t
      procedure :: logpdf
      procedure :: rvs
      procedure :: inbounds
+     procedure :: dlogpdf => dlogpdf_frank
   end type prior
 
   interface prior
@@ -140,7 +141,7 @@ contains
 
     real(wp) :: dl(self%npara)
 
-    dl = -10000.0_wp
+    dl = 0.0_wp
   end function dlogpdf
 
 
@@ -269,40 +270,109 @@ contains
 
   end function rvs
 
-  function logbetapdf(x, a, b)
+  function dlogpdf_frank(self, para) result(dlogprior)
+
+    class(prior), intent(inout) :: self
+    real(wp), intent(in) :: para(self%npara)
+
+    real(wp) :: dlogprior(self%npara)
+    real(wp) :: a, b
+    integer :: i
+
+    dlogprior = 0.0d0
+
+    if (.not. self%inbounds(para)) then
+       dlogprior = 0.0_wp
+       return
+    end if
+
+    associate(pmean => self%pmean, pstdd => self%pstdd )
+      do i = 1, self%npara
+
+         select case ( self%ptype(i) )
+         case( PARA_BETA )
+            a = (1-pmean(i))*pmean(i)**2/pstdd(i)**2 - pmean(i)
+            b = a*(1/pmean(i) - 1)
+            dlogprior(i) = dlogbetapdf(para(i),a,b)
+         case ( PARA_GAMMA )
+            b = pstdd(i)**2/pmean(i) !theta
+            a = pmean(i)/b           !k
+            dlogprior(i) = dloggampdf(para(i),a,b)
+         case ( PARA_NORMAL )
+            a = pmean(i)
+            b = pstdd(i)
+            dlogprior(i) = dlognorpdf(para(i),a,b)
+         case ( PARA_INVGAMMA )
+            a = pmean(i)
+            b = pstdd(i)
+            dlogprior(i) = dlogigpdf(para(i),a,b)
+          case ( PARA_UNIFORM )
+             a = pmean(i)
+             b = pstdd(i)
+             dlogprior(i) = 0.0_wp
+         end select
+      end do
+    end associate
+
+  end function dlogpdf_frank
+
+
+  real(wp) function logbetapdf(x, a, b) result(retval)
 
     real(wp), intent(in) :: x, a, b
-    real(wp) :: logbetapdf
 
-    logbetapdf = -betaln(a,b) + (a-1.0d0)*log(x) + (b-1.0d0)*log(1.0-x)
+    retval = -betaln(a,b) + (a-1.0d0)*log(x) + (b-1.0d0)*log(1.0-x)
 
   end function logbetapdf
 
-  real(wp) function loggampdf(x, a, b)
+  real(wp) function loggampdf(x, a, b) result(retval)
 
     real(wp), intent(in) :: x, a, b
 
-    loggampdf = -gamln(a) -a*log(b) + (a-1.0d0)*log(x) - x/b
+    retval = -gamln(a) -a*log(b) + (a-1.0d0)*log(x) - x/b
 
   end function loggampdf
 
-  real(wp) function lognorpdf(x, a, b)
+  real(wp) function lognorpdf(x, a, b) result(retval)
 
     real(wp), intent(in) :: x, a, b
 
-    lognorpdf = -0.5d0*log(2.0d0*M_PI) - log(b) - 0.5d0*(x-a)**2/b**2
+    retval = -0.5d0*log(2.0d0*M_PI) - log(b) - 0.5d0*(x-a)**2/b**2
 
   end function lognorpdf
 
-  real(wp) function logigpdf(x,a,b)
+  real(wp) function logigpdf(x,a,b) result(retval)
 
     real(wp), intent(in) :: x, a, b
 
-    logigpdf = log(2.0d0) - gamln(b/2.0d0) + b/2.0d0*log(b*a**2/2.0d0) &
+    retval = log(2.0d0) - gamln(b/2.0d0) + b/2.0d0*log(b*a**2/2.0d0) &
          -(b+1.0d0)/2.0d0*log(x**2) - b*a**2.0/(2.0d0*x**2)
 
   end function logigpdf
 
+  function dlogbetapdf(x,a,b);
+    real(wp), intent(in) :: x, a, b
+    real(wp) :: dlogbetapdf
+    dlogbetapdf = (a-1.0_wp)/x - (b-1.0_wp)/(1.0_wp-x);
+  endfunction dlogbetapdf
+
+  function dloggampdf(x,a,b);
+    real(wp), intent(in) :: x, a, b
+    real(wp) :: dloggampdf
+    dloggampdf = (a-1.0_wp)/x - 1.0_wp/b;
+  endfunction dloggampdf
+
+  function dlognorpdf(x,a,b);
+    real(wp), intent(in) :: x, a, b
+    real(wp) :: dlognorpdf
+    dlognorpdf =  -(x-a)/b**2;
+  endfunction dlognorpdf
+
+  function dlogigpdf(x,a,b);
+    real(wp), intent(in) :: x, a, b
+    real(wp) :: dlogigpdf
+    dlogigpdf = -(b+1.0_wp)/x + b*a**2/x**3;
+  endfunction dlogigpdf
 
     function logmvnormpdf(x, mu, chol_sigma) result(logq)
     !! Computes the log of the n-dimensional multivariate normal pdf at x
