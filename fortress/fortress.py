@@ -44,7 +44,7 @@ def load_estimates(file_string, resample=True, paranames=None, posterior='final'
             res = res.iloc[inds].reset_index()
       
         if paranames is not None:
-            vs = [c for c in res.columns in res.startswith('var')]
+            vs = [c for c in res.columns if c.startswith('var')]
             res = res.rename(columns=dict(zip(vs,paranames)))
           
         res['logmdd'] = np.log(output_json['Z_estimates']).sum()
