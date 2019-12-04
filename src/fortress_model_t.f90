@@ -7,13 +7,13 @@
 module fortress_bayesian_model_t
 
   use, intrinsic :: iso_fortran_env, only: wp => real64
-  use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
+  use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior
   use fortress_util, only: read_array_from_file
   use filter, only: kalman_filter, chand_recursion, kalman_filter_missing, REALLY_NEG
 
 
   implicit none
-
+ 
   real(wp), parameter :: M_PI = 3.14159265358979323846d0
 
 

@@ -252,8 +252,9 @@ contains
     real(wp) :: momemtum(self%model%npara), zeros_vec(self%model%npara), momemtum_dens_diff, scale_rand, momemtum0(self%model%npara)
     integer :: i_hmc
 
-     real(wp) :: old_particles(self%model%npara, self%npart), mu_old, mu_new, sig_old, sig_new, average_corr(self%model%npara)
+    real(wp) :: old_particles(self%model%npara, self%npart), mu_old, mu_new, sig_old, sig_new, average_corr(self%model%npara)
 
+    real(wp) :: incwt(self%npart), maxincwt, Zt
 
     zeros_vec = 0.0_wp
 
@@ -349,14 +350,29 @@ contains
           !------------------------------------------------------------
           ! Correction
           !------------------------------------------------------------
-          do j = 1, parasim%npart
-             parasim%weights(j) = parasim%weights(j) * exp( &
-                  (phi - phi_old)*(parasim%loglh(j)-parasim%loglhold(j)) )
-          end do
-          
-          call parasim%normalize_weights(self%temp%Z_estimates(i))
+          ! print*,phi - phi_old
+
+          ! do j = 1, parasim%npart
+          !    print*,parasim%weights(j),parasim%loglh(j),parasim%loglhold(j)
+          !    parasim%weights(j) = parasim%weights(j) * exp( &
+          !         (phi - phi_old)*(parasim%loglh(j)-parasim%loglhold(j)) )
+
+          !    if (isnan(parasim%weights(j))) then
+          !       print*,'Particle ', j, 'is nan'
+          !       print *,parasim%particles(:,j)
+          !       parasim%weights(j) = 0.0_wp
+          !    end if
+          ! end do
+          ! print*,parasim%weights
+          ! call parasim%normalize_weights(self%temp%Z_estimates(i))
+          incwt = (phi - phi_old)*(parasim%loglh-parasim%loglhold)
+          maxincwt = maxval(incwt)
+          Zt = sum(exp(incwt - maxincwt)*parasim%weights)
+          parasim%weights = exp(incwt - maxincwt)*parasim%weights / Zt
+          self%temp%Z_estimates = log(Zt) + maxincwt
+
           self%temp%ESS_estimates(i) = parasim%ESS()
-          
+          if (isnan(self%temp%ESS_estimates(i) )) stop
           print*,'============================================================='
           write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
           write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
@@ -552,7 +568,7 @@ contains
 
                 if (self%mutation_type(1:3) == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum_dens_diff)
                 if (.not.(self%model%inbounds(p0))) alp = 0.0_wp
-
+                if (isnan(alp)) alp = 0.0_wp
 
                 if (nodeu(nodeuind,1) < alp) then
                    !print*,loglh0,loglhold0,p0,alp
@@ -589,7 +605,7 @@ contains
           print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
           write(*,'(A,F4.2,A,F8.4,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
-          write(*,'(A,F 10.2)') 'Log MDD estimate:', sum(log(self%temp%Z_estimates(1:i)))
+          write(*,'(A,F 10.2)') 'Log MDD estimate:', sum(self%temp%Z_estimates(1:i))
           write(*,'(A,F 10.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
           write(*,'(A,F 10.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
 

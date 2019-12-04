@@ -47,7 +47,7 @@ def load_estimates(file_string, resample=True, paranames=None, posterior='final'
             vs = [c for c in res.columns if c.startswith('var')]
             res = res.rename(columns=dict(zip(vs,paranames)))
           
-        res['logmdd'] = np.log(output_json['Z_estimates']).sum()
+        res['logmdd'] = np.array(output_json['Z_estimates']).sum()
       
         results.append(res)
     if len(output_files) == 1:

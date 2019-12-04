@@ -1,4 +1,4 @@
-from FRUIT import *
+#from FRUIT import *
 test_modules = ['test/test_VAR.f90',
 #                 'test/test_json.f90',
 #                 'test/test_prior.f90',
@@ -12,6 +12,6 @@ test_modules = ['test/test_VAR.f90',
 # #               'test/test_particle_filter.f90'
  ]
 # 
-suite = test_suite(test_modules)
-suite.build_run('test_driver.f90', 'make test_driver')
-suite.summary()
+#suite = test_suite(test_modules)
+#suite.build_run('test_driver.f90', 'make test_driver')
+#suite.summary()

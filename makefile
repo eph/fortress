@@ -11,7 +11,7 @@ LIBOBJS=fortress_info.o fortress_constants.o fortress_util.o fortress_linalg.o r
 # endif
 
 
-COMPILER=mpif90 -fstack-protector -fimplicit-none -O3 -ffree-line-length-1000 # -Wall -fcheck=all -g -fbacktrace #03
+COMPILER=mpif90 -fstack-protector -fimplicit-none -ffree-line-length-1000 -O3 # -Wall -fcheck=all -g -fbacktrace #03
 #COMPILER=mpif90 -Wall -fcheck=all -g -fbacktrace -ffree-line-length-1000 # 
 FCDEC=-DGFORTRAN
 
