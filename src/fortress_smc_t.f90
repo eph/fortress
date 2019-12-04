@@ -369,7 +369,7 @@ contains
           maxincwt = maxval(incwt)
           Zt = sum(exp(incwt - maxincwt)*parasim%weights)
           parasim%weights = exp(incwt - maxincwt)*parasim%weights / Zt
-          self%temp%Z_estimates = log(Zt) + maxincwt
+          self%temp%Z_estimates(i) = log(Zt) + maxincwt
 
           self%temp%ESS_estimates(i) = parasim%ESS()
           if (isnan(self%temp%ESS_estimates(i) )) stop
