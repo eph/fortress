@@ -105,7 +105,7 @@ contains
 
     self%phi_schedule = self%phi_schedule**lambda
     self%phi_schedule(nstages) = self%phi_max
-    self%Z_estimates(:) = 1.0_wp
+    self%Z_estimates(:) = 0.0_wp
     self%ESS_estimates(1) = 0.0_wp !npart
     self%T_schedule = max_T
 
