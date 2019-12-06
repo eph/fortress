@@ -32,8 +32,6 @@ def load_estimates(file_string, resample=True, paranames=None, posterior='final'
 
         if posterior=='final': 
             to_load = posteriors[-1]
-        elif posterior=='prior':
-            to_load = 'posterior.001'
         else:
             to_load = posterior
 
