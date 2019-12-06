@@ -315,11 +315,11 @@ contains
           call scatter_particles(parasim, nodepara)
           call self%evaluate_time_t_lik(nodepara, current_T)
           call gather_particles(parasim, nodepara)
-          if (phi_old == 1.0_wp) then
+          !if (phi_old == 1.0_wp) then
              phi_old = 0.0_wp
-          else
-             write(stderr, '(a)') 'ERROR: tempering schedule misspecified.'
-          end if
+          !else
+          !   write(stderr, '(a)') 'ERROR: tempering schedule misspecified.'
+          !end if
 
        end if
 
@@ -365,7 +365,7 @@ contains
           ! end do
           ! print*,parasim%weights
           ! call parasim%normalize_weights(self%temp%Z_estimates(i))
-          incwt = (phi - phi_old)*(parasim%loglh-parasim%loglhold)
+          incwt = (phi - phi_old)*parasim%loglh + (phi_old - phi)*parasim%loglhold
           maxincwt = maxval(incwt)
           Zt = sum(exp(incwt - maxincwt)*parasim%weights)
           parasim%weights = exp(incwt - maxincwt)*parasim%weights / Zt
@@ -539,31 +539,30 @@ contains
                 end if
 
 
-                ! if ( self%endog_tempering .eqv. .true.) then !thennodepara%loglhold(j) /= 0.0_wp) then
-                !    select type(mod => self%model )
-                !    class is (fortress_lgss_model)
-                !       loglhvec(1:current_T) = mod%lik_filter_vec(p0, T=current_T)
-                !       loglh0 = sum(loglhvec(1:current_T))
-                !       loglhold0 = sum(loglhvec(1:maxval([current_T-1,0])))
+                if ( self%endog_tempering .eqv. .true.) then 
+                   select type(mod => self%model )
+                    class is (fortress_lgss_model)
+                       loglhvec(1:current_T) = mod%lik_filter_vec(p0, T=current_T)
+                       loglh0 = sum(loglhvec(1:current_T))
+                       loglhold0 = sum(loglhvec(1:maxval([current_T-1,0])))
 
-                !       if ((isnan(loglh0))) loglh0 = BAD_LOG_LIKELIHOOD
-                !       if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
-                !    class default
-                !       loglh0 = mod%lik(p0, T=current_T)
-                !       loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
-                !    end select
-                ! else
+                       if ((isnan(loglh0))) loglh0 = BAD_LOG_LIKELIHOOD
+                       if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
+                    class default
+                       loglh0 = mod%lik(p0, T=current_T)
+                       loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
+                    end select
+                else
                    loglh0 = self%model%lik(p0, T=current_T)
                    loglhold0 = 0.0_wp
-                !end if
+                end if
 
                 prior0 = self%model%prior%logpdf(p0)
 
                 likdiff = loglh0 - nodepara%loglh(j)
-
-
                 likdiffold = loglhold0 - nodepara%loglhold(j)
                 prdiff = prior0 - nodepara%prior(j)
+
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
                 if (self%mutation_type(1:3) == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum_dens_diff)
