@@ -11,7 +11,7 @@ build:
     
 requirements:
   build:
-    - python
+    - python=3.8
     - numpy 
     - {{ compiler('fortran') }}
     - mpich
@@ -21,6 +21,16 @@ requirements:
     - fypp
     - json-fortran
 
+  host:
+    - python=3.8
+    - numpy 
+    - {{ compiler('fortran') }}
+    - mpich
+    - flap
+    - fruit 
+    - fruitpy
+    - fypp
+    - json-fortran
 
   run:
     - python
@@ -43,14 +53,3 @@ test:
     - test
     - makefile
     - src
-
-#   requires:
-#     - fruitpy
-#     - fortress
-#     - lapack
-#     #- mpich2
-#     - json-fortran
-#     - openblas
-
-
-    

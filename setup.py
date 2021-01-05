@@ -1,3 +1,4 @@
+import setuptools
 import numpy.distutils.core
 
 if __name__ == "__main__":
