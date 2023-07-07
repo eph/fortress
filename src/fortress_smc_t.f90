@@ -256,6 +256,7 @@ contains
 
     real(wp) :: incwt(self%npart), maxincwt, Zt
 
+    real(wp), external :: ddot
     zeros_vec = 0.0_wp
 
     scale = self%initial_c
@@ -497,8 +498,9 @@ contains
           end if
 
           call inverse(chol_var, info)
+          !print*,'info', info
           call cholesky(chol_var, info)
-
+          !print*,'info2', info
        end if
           
 
@@ -525,7 +527,6 @@ contains
                    p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,nodemind))
                  elseif (self%mutation_type(1:3) == "HMC") then 
                     call dgemv('N', self%model%npara, self%model%npara, 1.0_wp, chol_var, self%model%npara, nodeeps(b_ind,nodemind), 1, 0.0_wp, momemtum0, 1)
-
                     momemtum = momemtum0 + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
                     do i_hmc = 1, self%L
                        call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
@@ -534,9 +535,20 @@ contains
                     end do
                     momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
                     momemtum = -momemtum
-                    momemtum_dens_diff = logmvnormpdf(momemtum, zeros_vec, chol_var) &
-                         - logmvnormpdf(momemtum0, zeros_vec, chol_var)
-                end if
+                    !momemtum_dens_diff = logmvnormpdf(momemtum, zeros_vec, chol_var) &
+                    !     - logmvnormpdf(momemtum0, zeros_vec, chol_var)
+
+                    call dtrsv('l','n', 'n', self%model%npara, chol_var, self%model%npara, momemtum, 1)
+
+                    call dtrsv('l','n', 'n', self%model%npara, chol_var, self%model%npara, momemtum0, 1)
+                    momemtum_dens_diff = -0.5_wp*ddot(self%model%npara, momemtum, 1, momemtum, 1)+0.5_wp*ddot(self%model%npara, momemtum0, 1, momemtum0, 1)
+
+                 ! elseif (self%mutation_type == "MALA") then
+                 !    allocate(mala_mean(bsize))
+                 !    mala_mean = p0(b_ind) + scale/2.0*matmul(block_variance_chol, self%model%dlik(p0))
+                 !    p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,nodemind)) + &
+                 !         scale*phi*self%model%dlik(p0)
+                 end if
 
 
                 if ( self%endog_tempering .eqv. .true.) then 
@@ -566,6 +578,11 @@ contains
                 alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff)
 
                 if (self%mutation_type(1:3) == "HMC")  alp = exp( phi*(likdiff-likdiffold) + likdiffold + prdiff + momemtum_dens_diff)
+
+                !print*,loglh0, prior0
+                !print*,momemtum_dens_diff, momemtum,logmvnormpdf(momemtum, zeros_vec, chol_var)
+                !print*,(alp)
+
                 if (.not.(self%model%inbounds(p0))) alp = 0.0_wp
                 if (isnan(alp)) alp = 0.0_wp
 

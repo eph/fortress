@@ -25,6 +25,12 @@ def load_estimates(file_string, resample=True, paranames=None, posterior='final'
     output_files = glob.glob(file_string)
 
     results = []
+
+    if len(output_files) == 0:
+        print('No files found')
+        return None
+
+    
     for f in output_files:
         output_json = json.loads(open(f).read())
 
@@ -78,7 +84,7 @@ class SMCDriver(object):
 
         mpi = 'mpirun -n {} '.format(nproc)
         args = sum([['--'+k.replace('_','-'),str(v)] for k,v in kwargs.items()], [])
-        args = [a for a in args if a is not 'True']
+        args = [a for a in args if a != 'True']
 
         proc = subprocess.Popen([mpi+self.executable+' '+' '.join(args)],
                                 env=my_env, stdout=subprocess.PIPE, shell=True,
@@ -219,7 +225,7 @@ end module model_t
 
 def make_model_file(lik,npara,T,other_functions='',other_includes=''):
 
-    return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions,other_includes=other_inclues)
+    return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions,other_includes=other_includes)
 
 
 def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,

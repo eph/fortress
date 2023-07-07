@@ -6,6 +6,41 @@ module test_linalg
 
 contains
 
+!  subroutine test_matpow
+!
+!    use fortress_linalg, only: matpow => matpow_fortran
+!
+!    ! create a 3x3 matrix and fill it with random numbers
+!    real64, dimension(3,3) :: A
+!
+!    ! fill the matrix with integers 1-9
+!    A(1,1) = 1.0_wp
+!    A(1,2) = 2.0_wp
+!    A(1,3) = 3.0_wp
+!    A(2,1) = 4.0_wp
+!    A(2,2) = 5.0_wp
+!    A(2,3) = 6.0_wp
+!    A(3,1) = 7.0_wp
+!    A(3,2) = 8.0_wp
+!    A(3,3) = 9.0_wp
+!
+!    ! multiply the matrix by itself twice manually using matmul
+!    ! and compare the results with the Fortran routine
+!    ! (this is a simple test, but it is useful to see if the
+!    ! Fortran routine is working correctly)
+!    real64, dimension(3,3) :: B
+!    real64, dimension(3,3) :: C
+!
+!    B = matmul(A,A)
+!    B = matmul(B,A)
+!
+!    call matpower(A,3,C)
+!
+!    ! compare the results using assert_equals
+!    call assert_equals(maxval(abs(B-C)),1.0d-6)
+!
+!end subroutine test_matpow
+
   subroutine test_dlyap
 
     use fortress_linalg, only: dlyap

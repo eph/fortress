@@ -55,7 +55,7 @@ module fortress_bayesian_model_t
      end function lik_func
   end interface
 
-       
+
   type,public,extends(fortress_abstract_bayesian_model), abstract :: fortress_ss_model
 
      integer :: ns, neps
@@ -87,45 +87,45 @@ module fortress_bayesian_model_t
      end function policy_function_i
 
      real(wp) function pdfy_i(m, t, states_new, states_old, para) result(pdf)
-      use, intrinsic :: iso_fortran_env, only: wp => real64
-      import
-      implicit none
-      class(fortress_ss_model), intent(inout) :: m 
-      integer, intent(in) :: t
-      real(wp), intent(in) :: states_new(m%ns), states_old(m%ns)
-      real(wp), intent(in) :: para(m%npara)
-    end function pdfy_i
+       use, intrinsic :: iso_fortran_env, only: wp => real64
+       import
+       implicit none
+       class(fortress_ss_model), intent(inout) :: m
+       integer, intent(in) :: t
+       real(wp), intent(in) :: states_new(m%ns), states_old(m%ns)
+       real(wp), intent(in) :: para(m%npara)
+     end function pdfy_i
 
-    real(wp) function logpdfy_kernel_i(m, t, states_new, states_old, para) result(logpdf)
-      use, intrinsic :: iso_fortran_env, only: wp => real64
-      import
-      implicit none
-      class(fortress_ss_model), intent(inout) :: m 
-      integer, intent(in) :: t
-      real(wp), intent(in) :: states_new(m%ns), states_old(m%ns)
-      real(wp), intent(in) :: para(m%npara)
-      double precision :: z
-      integer :: i
-    end function logpdfy_kernel_i
+     real(wp) function logpdfy_kernel_i(m, t, states_new, states_old, para) result(logpdf)
+       use, intrinsic :: iso_fortran_env, only: wp => real64
+       import
+       implicit none
+       class(fortress_ss_model), intent(inout) :: m
+       integer, intent(in) :: t
+       real(wp), intent(in) :: states_new(m%ns), states_old(m%ns)
+       real(wp), intent(in) :: para(m%npara)
+       double precision :: z
+       integer :: i
+     end function logpdfy_kernel_i
 
-    logical function solve_serial_i(self, para) result(converged)
-      use, intrinsic :: iso_fortran_env, only: wp => real64
-      import
-      implicit none
-      class(fortress_ss_model), intent(inout) :: self
-      real(wp), intent(in) :: para(self%npara)
-      
-    end function solve_serial_i
+     logical function solve_serial_i(self, para) result(converged)
+       use, intrinsic :: iso_fortran_env, only: wp => real64
+       import
+       implicit none
+       class(fortress_ss_model), intent(inout) :: self
+       real(wp), intent(in) :: para(self%npara)
 
-    logical function solve_parallel_i(self, para, nproc, rank) result(converged)
-      use, intrinsic :: iso_fortran_env, only: wp => real64
-      import
-      implicit none
-      class(fortress_ss_model), intent(inout) :: self 
-      real(wp), intent(in) :: para(self%npara)
-      integer, intent(in) :: nproc, rank
-      
-    end function solve_parallel_i
+     end function solve_serial_i
+
+     logical function solve_parallel_i(self, para, nproc, rank) result(converged)
+       use, intrinsic :: iso_fortran_env, only: wp => real64
+       import
+       implicit none
+       class(fortress_ss_model), intent(inout) :: self
+       real(wp), intent(in) :: para(self%npara)
+       integer, intent(in) :: nproc, rank
+
+     end function solve_parallel_i
 
 
   end interface
@@ -169,6 +169,14 @@ module fortress_bayesian_model_t
      end subroutine system_matrices_i
 
   end interface
+
+  !type,public,extends(fortress_lgss_model) :: fortress_lgss_model_with_sv
+  !   real(wp), allocatable :: time_varying_QQ(:,:,:)
+  !
+  ! contains
+  !   procedure :: lik_conditional_on_sv
+  !end type fortress_lgss_model_cr
+
 
 contains 
 

@@ -22,8 +22,8 @@ ifdef CONDA_BUILD
 LIB=$(PREFIX)/lib
 INC=$(PREFIX)/include
 else
-LIB=$(HOME)/anaconda3/lib
-INC=$(HOME)/anaconda3/include
+LIB=$(HOME)/miniconda3/lib
+INC=$(HOME)/miniconda3/include
 endif
 
 #use export LD_LIBRARY_PATH=.
