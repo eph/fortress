@@ -7,6 +7,39 @@ module fortress_linalg
 
 contains
 
+! ! write a function to raise a matrix to a power using LAPACK
+!   subroutine matpow(A, n, B)
+!     use iso_c_binding
+!     use iso_fortran_env, only: wp => real64
+!     implicit none
+!     real(wp), intent(in) :: A(:,:), B(:,:)
+!     integer, intent(in) :: n
+!     integer :: i, j, k, l, info
+!     integer :: lda, ldb
+!     real(wp) :: alpha, beta
+!     integer :: ipiv(*)
+!     real(wp) :: work(*)
+!     integer :: lwork
+!     lda = size(A,1)
+!     ldb = size(B,1)
+!     lwork = lda
+!     call dgetrf(lda, lda, A, lda, ipiv, info)
+!     if (info .ne. 0) then
+!       write(*,*) 'matpow: dgetrf failed'
+!       return
+!     endif
+!     call dgetri(lda, A, lda, ipiv, work, lwork, info)
+!     if (info .ne. 0) then
+!       write(*,*) 'matpow: dgetri failed'
+!       return
+!     endif
+!     do i = 1, n
+!       call dgemm( 'N', 'N', lda, lda, lda, ONE, A, lda, A, lda, ZERO, B, ldb )
+!       call dgemm( 'N', 'N', lda, lda, lda, ONE, B, ldb, A, lda, ZERO, A, lda )
+!     enddo
+!   end subroutine matpow
+
+
   real(wp) function determinant(matrix, r) result(det)
     ! Computes the determinant of symmetric square matrix, matrix (rank r).
     integer, intent(in) :: r
@@ -59,6 +92,61 @@ contains
 
   end subroutine inverse
 
+  ! a subroutine to raise a matrix to a power
+   subroutine matrix_power(X,p,Y)
+   
+      integer, intent(in) :: p
+      real(wp), intent(inout) :: X(:,:), Y(:,:)
+   
+      integer :: r, c, i, j, k, l, m, n, ipiv(size(X,1))
+      real(wp) :: work(3*size(X,1))
+   
+      r = size(X,1)
+      c = size(X,1)
+   
+      if (r/=c) return
+   
+      call dgetrf(r,r,X,r,ipiv,i)
+      call dgetri(r,X,r,ipiv,work,3*r,i)
+   
+      do k = 1, p
+         do i = 1, r
+         do j = 1, r
+            Y(i,j) = 0.0_wp
+         end do
+         Y(i,i) = 1.0_wp
+         end do
+         do i = 1, r
+         do j = 1, r
+            do l = 1, r
+               Y(i,j) = Y(i,j) + X(i,l) * Y(l,j)
+            end do
+         end do
+         end do
+      end do
+   
+   end subroutine matrix_power
+
+   ! a subroutine to compute the trace of a matrix 
+   subroutine trace(X,Y)
+   
+      real(wp), intent(inout) :: X(:,:), Y
+   
+      integer :: r, c, i, j
+   
+      r = size(X,1)
+      c = size(X,1)
+   
+      if (r/=c) return
+   
+      Y = 0.0_wp
+      do i = 1, r
+         do j = 1, r
+            Y = Y + X(i,j)
+         end do
+      end do
+   
+   end subroutine trace
 
   subroutine cholesky(X,info) 
 
@@ -214,7 +302,6 @@ SUBROUTINE DLYAP(A, QQ, Sigma, nx, status)
  
 
        ! balance for symmetry
-
        Sigma = 0.5d0 * (Sigma + transpose(Sigma))
 
  

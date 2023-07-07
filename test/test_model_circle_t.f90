@@ -2,7 +2,7 @@ module test_model_circle_t
   use, intrinsic :: iso_fortran_env, only: wp => real64
 
   use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior 
-  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model, test
+  use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
 
   implicit none
 
@@ -45,9 +45,9 @@ contains
 
   end function new_model
 
-  subroutine print_test()
-    print*,test
-  end subroutine print_test
+  ! subroutine print_test()
+  !   print*,test
+  ! end subroutine print_test
 
   function model_lik(self, para, T) result(l)
 

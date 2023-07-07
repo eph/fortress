@@ -39,6 +39,21 @@ contains
 
   end subroutine mkdir
 
+  ! check if a file exists
+   subroutine file_exists(file_name, retcode)
+   
+      character(len=:), allocatable, intent(in) :: file_name
+      integer, intent(out) :: retcode 
+      logical :: fileexists
+   
+      inquire(file=file_name, exist=fileexists)
+      if (fileexists) then
+          retcode = 1
+      else
+          retcode = 0
+      endif
+   
+   end subroutine file_exists
 
 
 

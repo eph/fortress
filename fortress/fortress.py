@@ -25,6 +25,12 @@ def load_estimates(file_string, resample=True, paranames=None, posterior='final'
     output_files = glob.glob(file_string)
 
     results = []
+
+    if len(output_files) == 0:
+        print('No files found')
+        return None
+
+    
     for f in output_files:
         output_json = json.loads(open(f).read())
 
