@@ -1,0 +1,27 @@
+[build-system]
+requires = [
+  "setuptools>=61",
+  "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fortress"
+version = "0.1.5"
+description = "Python helpers for building and running Fortress SMC models"
+readme = "README.md"
+keywords = ["fortress", "fortran", "smc", "bayesian"]
+# Specify only runtime requirements used by the package at import/runtime
+dependencies = [
+  "numpy",
+  "pandas",
+  "tqdm",
+]
+# Uncomment and adjust if you want to enforce a minimum Python version
+# requires-python = ">=3.8"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["fortress"]

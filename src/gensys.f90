@@ -11,7 +11,7 @@ module gensys
   use fortress_util, only: write_array_to_file
   !use omp_lib
 
- 
+
 
  
 
@@ -32,7 +32,6 @@ module gensys
   integer :: fixdiv = 1
   real(wp) :: stake = 1.01_wp
 
- 
 
   !$OMP THREADPRIVATE(nunstab,stake,zxz,fixdiv)
 
@@ -70,7 +69,7 @@ contains
 
     integer :: info, pin, n, i, ipiv(size(G0,1)), ldzt, nstab
 
- 
+
 
     double complex, allocatable :: Qstab(:,:), Qunstab(:,:)
 
@@ -372,6 +371,13 @@ contains
 
     double complex, allocatable :: work(:)
 
+    complex(wp), allocatable :: dummy_u(:,:), dummy_vt(:,:)
+    integer :: dummy_ldu, dummy_ldvt
+
+    allocate(dummy_u(1,1), dummy_vt(1,1))
+    dummy_ldu = 1
+    dummy_ldvt = 1
+
  
 
     md = minval((/ m, n /),1)
@@ -382,7 +388,7 @@ contains
 
     allocate(rwork(5*md), norm_m(md), work(100))
 
-    call zgesvd('N','N', m, n, d, m, norm_m, 0, m, 0, md, work, lwork, rwork, info)
+    call zgesvd('N','N', m, n, d, m, norm_m, dummy_u, dummy_ldu, dummy_vt, dummy_ldvt, work, lwork, rwork, info)
 
     lwork = work(1)
 
@@ -392,7 +398,7 @@ contains
 
     allocate(work(lwork))
 
-    call zgesvd('N','N', m, n, d, m, norm_m, 0, m, 0, md, work, lwork, rwork, info)
+    call zgesvd('N','N', m, n, d, m, norm_m, dummy_u, dummy_ldu, dummy_vt, dummy_ldvt, work, lwork, rwork, info)
 
     if (info < 0) then
 

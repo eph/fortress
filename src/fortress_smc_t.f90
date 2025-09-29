@@ -15,12 +15,9 @@ module fortress_smc_t
   use json_module, only: json_core, json_value
   use fortress_info
 
-  !use mpi
+  use mpi
 
   implicit none
-
-  include 'mpif.h'
-
 
   character(len=2), parameter :: DEFAULT_OUTPUT_DIR = './'
 
@@ -110,7 +107,6 @@ contains
     self%T_schedule = max_T
 
   end function new_tempering_schedule
-
   subroutine write_json(self, json_node)
 
     class(tempering_schedule) :: self
@@ -186,7 +182,8 @@ contains
        class is (fortress_lgss_model)
           smc%temp%T_schedule = mod%T
        class default
-          smc%temp%T_schedule = mod%T
+          smc%temp%T_schedule = 1 !mod%T
+          smc%temp%T_schedule(1) = 0
        end select
        smc%temp%phi_schedule = 0.0_wp
     end if
@@ -306,6 +303,9 @@ contains
        previous_T = self%temp%T_schedule(i-1)
        current_T = self%temp%T_schedule(i)
 
+       print*,'Stage', i, 'of', self%temp%nstages, 'with', current_T, 'observations'
+       print*,'last stage had', previous_T, 'observations'
+
        phi = self%temp%phi_schedule(i)
        phi_old = self%temp%phi_schedule(i-1)
 
@@ -339,7 +339,7 @@ contains
                    phi0 = max(phi0 , phi_old+0.01_wp)
                    if (phi0 < phi_old) stop
                    ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
-                   print*,phi0,ess_gap1
+                   !print*,phi0,ess_gap1
                 end do
                 phi = bisection(phi_old, phi0, self%bisection_thresh, phi_old, parasim, self%resample_tol)
              end if
@@ -414,10 +414,9 @@ contains
 
        ! for endogenous tempering wiht multiprocessing
        call mpi_barrier(MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(self%temp%nstages, 1, MPI_DOUBLE_PRECISION, &
-            0, MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, &
-            0, MPI_COMM_WORLD, mpierror)
+       call mpi_bcast(self%temp%nstages, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
+       call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+
        self%temp%phi_schedule(i) = phi
 
        call mpi_scatter(eps, self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, nodeeps, &
@@ -467,7 +466,6 @@ contains
           end if
 
           call cholesky(block_variance_chol, info)
-
           chol_var(b_ind, b_ind) = block_variance_chol
           deallocate(b_ind, block_variance_chol)
        end do
@@ -477,9 +475,11 @@ contains
           if (self%mutation_type == 'HMC-diagM') then 
              chol_var = 0.0_wp
              do j = 1,self%model%npara
-                chol_var(j,j) = variance(j,j) 
+                variance(j,j+1:self%model%npara) = 0.0_wp
+                chol_var(j,1) = 1.0_wp/sqrt(variance(j,j))
              end do
-             variance = chol_var
+             info = 0
+             variance(:,1) = chol_var(:,1)**(-2)
           elseif (self%mutation_type == 'HMC-M') then
              chol_var = variance
           elseif (self%mutation_type == 'HMC-I') then
@@ -489,18 +489,29 @@ contains
                 chol_var(j,j) = 1.0_wp
                 variance(j,j) = 1.0_wp
              end do
+                  call dpotrf('L', self%model%npara, chol_var, self%model%npara, info)
           else
              chol_var = 0.0_wp
              do j = 1,self%model%npara
                 chol_var(j,j) = variance(j,j) 
              end do
              variance = chol_var
+             call dpotrf('L', self%model%npara, chol_var, self%model%npara, info)
           end if
 
-          call inverse(chol_var, info)
-          !print*,'info', info
-          call cholesky(chol_var, info)
-          !print*,'info2', info
+
+
+          m = 1
+          do while (info /= 0)
+             write(*,*) 'Cholesky decomposition failed, adding ', m, ' times 1e-3 to the diagonal'
+             chol_var = variance
+             do j = 1,self%model%npara
+                chol_var(j,j) = variance(j,j)+m*1.0e-3_wp
+             end do
+             m = m+1
+             call dpotrf('L', self%model%npara, chol_var, self%model%npara, info)
+          end do
+
        end if
           
 
@@ -526,23 +537,52 @@ contains
                 if (self%mutation_type == "RWMH") then
                    p0(b_ind) = p0(b_ind) + scale*matmul(block_variance_chol, nodeeps(b_ind,nodemind))
                  elseif (self%mutation_type(1:3) == "HMC") then 
-                    call dgemv('N', self%model%npara, self%model%npara, 1.0_wp, chol_var, self%model%npara, nodeeps(b_ind,nodemind), 1, 0.0_wp, momemtum0, 1)
-                    momemtum = momemtum0 + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    momemtum0 = nodeeps(b_ind,nodemind)
+                    if (self%mutation_type == 'HMC-diagM') then
+                       momemtum0 = momemtum0*sqrt(chol_var(:,1))
+                    else
+                       call dpotrs('L', self%model%npara, 1, chol_var, self%model%npara, momemtum0, self%model%npara, info)
+                    end if
+                    ! print*,chol_var
+                    momemtum = momemtum0 + scale*(phi*self%model%dlik(p0, current_T) + (1.0_wp-phi)*self%model%dlik(p0, current_T-1) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    ! print*, 'The current T is ', current_T, self%model%lik(p0, current_T), self%model%dlik(p0, current_T)
+                    ! print*, 'The previous T is ', previous_T, self%model%lik(p0, previous_T), self%model%dlik(p0, previous_T)
+                    ! stop
+                    !
                     do i_hmc = 1, self%L
-                       call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
-                       if (i_hmc < self%L) momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))
-                       
+                       if (self%mutation_type == 'HMC-diagM') then
+                          p0 = p0 + scale*momemtum0*variance(:,1)
+                       else
+                          call dgemv('N', self%model%npara, self%model%npara, scale, variance, self%model%npara, momemtum, 1, 1.0_wp, p0, 1)
+                       end if
+                       if (i_hmc < self%L) momemtum = momemtum + scale*(phi*self%model%dlik(p0, current_T) + (1.0_wp-phi)*self%model%dlik(p0,current_T-1) + self%model%prior%dlogpdf(p0))!/2.0_wp
                     end do
-                    momemtum = momemtum + scale*(phi*self%model%dlik(p0) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    momemtum = momemtum + scale*(phi*self%model%dlik(p0, current_T) + (1.0_wp-phi)*self%model%dlik(p0, current_T-1) + self%model%prior%dlogpdf(p0))/2.0_wp
+                    ! if (current_T==3) then
+                    !    p0 = self%model%dlik(p0, current_T)
+                    !    do i_hmc = 1, self%model%npara
+                    !       print *, i_hmc, p0(i_hmc)
+                    !       end do
+                    ! stop
+                    ! end if
+                    !print*, momemtum
+                    !print*,current_T, self%model%lik(p0, current_T)
+                    !print*,self%model%dlik(p0, current_T)
+
+                    !print*,momemtum
                     momemtum = -momemtum
-                    !momemtum_dens_diff = logmvnormpdf(momemtum, zeros_vec, chol_var) &
-                    !     - logmvnormpdf(momemtum0, zeros_vec, chol_var)
-
-                    call dtrsv('l','n', 'n', self%model%npara, chol_var, self%model%npara, momemtum, 1)
-
-                    call dtrsv('l','n', 'n', self%model%npara, chol_var, self%model%npara, momemtum0, 1)
-                    momemtum_dens_diff = -0.5_wp*ddot(self%model%npara, momemtum, 1, momemtum, 1)+0.5_wp*ddot(self%model%npara, momemtum0, 1, momemtum0, 1)
-
+                    if (self%mutation_type == 'HMC-diagM') then
+                       momemtum0= momemtum0/chol_var(:,1)
+                       momemtum = momemtum/chol_var(:,1)
+                    else
+                       call dpotrs('L', self%model%npara, 1, chol_var, self%model%npara, momemtum, self%model%npara, info)
+                       call dpotrs('L', self%model%npara, 1, chol_var, self%model%npara, momemtum0, self%model%npara, info)
+                    end if
+                    momemtum_dens_diff = -0.5*sum(momemtum**2)+0.5*sum(momemtum0**2)
+                    !print*,momemtum
+                    !print*,-momemtum0
+                    !print*,momemtum_dens_diff
+                    !stop
                  ! elseif (self%mutation_type == "MALA") then
                  !    allocate(mala_mean(bsize))
                  !    mala_mean = p0(b_ind) + scale/2.0*matmul(block_variance_chol, self%model%dlik(p0))
@@ -562,7 +602,7 @@ contains
                        if ((isnan(loglhold0))) loglhold0 = BAD_LOG_LIKELIHOOD
                     class default
                        loglh0 = mod%lik(p0, T=current_T)
-                       loglhold0 = 0.0_wp !mod%lik(p0, T=maxval([current_T-1,0]))
+                       loglhold0 = mod%lik(p0, T=maxval([current_T-1,0]))
                     end select
                 else
                    loglh0 = self%model%lik(p0, T=current_T)
@@ -618,9 +658,9 @@ contains
           !     / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
           scale = scale * (0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
-          print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
-               / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
-          write(*,'(A,F4.2,A,F8.4,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
+          !print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
+          !     / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
+          write(*,'(A,F4.2,A,F10.8,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
           write(*,'(A,F 10.2)') 'Log MDD estimate:', sum(self%temp%Z_estimates(1:i))
           write(*,'(A,F 10.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
           write(*,'(A,F 10.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
@@ -644,16 +684,16 @@ contains
              average_corr(j) = (sum(old_particles(j,:) * parasim%particles(j,:))/self%npart - mu_old*mu_new) / sqrt(sig_new * sig_old)
           end do
           
-          print*,minval(average_corr), maxval(average_corr)
+          !print*,minval(average_corr), maxval(average_corr)
           
-          ! if ((maxval(average_corr) > 0.75_wp)) then
-          !    self%L = floor(self%L * 1.25_wp)
-          !    !scale = scale * 1.1_wp
-          ! elseif (maxval(average_corr) < 0.25_wp) then 
-          !    self%L = floor(self%L * 0.75_wp)+1
-          ! end if
-          ! self%L = min(self%L, 100)
-          ! print*,self%L
+          !if ((maxval(average_corr) > 0.75_wp)) then
+          !   self%L = floor(self%L * 1.25_wp)+1
+          !   !scale = scale * 1.1_wp
+          !elseif (maxval(average_corr) < 0.25_wp) then
+          !   self%L = floor(self%L * 0.75_wp)
+          !end if
+          !!self%L = !min(self%L, 100)
+          !print*,self%L
 
        end if
 

@@ -32,15 +32,15 @@ FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
 FLAP=-I$(INC)/flap -L$(LIB) -lflap
 #FORTRESS=-I$(INC)/fortress -L$(LIB) -lfortress
 FORTRESS= -L. -lfortress -Wl,-rpath=.
-JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
+JSON=-I/usr/local/include -L$(LIB)/json-fortran -ljsonfortran
 
 
 .PHONY: all clean test test_library
 
 %.o : %.f90
 	$(FPP) $(FCDEC) $< $(notdir $(basename $<))_tmp.f90
-	$(COMPILER) $(FRUIT) $(JSON) -fPIC -c $(notdir $(basename $<)_tmp.f90) $(FLAP) -o $(notdir $(basename $<)).o
-	rm $(notdir $(basename $<))_tmp.f90
+	$(COMPILER) $(FRUIT) $(JSON) -fPIC -c $(notdir $(basename $<)_tmp.f90) $(FLAP) -o $(notdir $(basename $<)).o 
+	rm $(notdir $(basename $<))_tmp.f90 
 
 test_%.o : test_%.f90
 	$(FPP) $(FCDEC) $< $(notdir $(basename $<))_tmp.f90

@@ -220,6 +220,22 @@ contains
     deallocate(rand_norm)
   end function inv_gamma_rvs
 
+    function inv_gamma1_rvs(rn, dim_a, dim_b, alpha, beta) result(rvs)
+        class(fortress_random) :: rn
+        integer, intent(in) :: dim_a, dim_b
+        real(wp) :: rvs(dim_a, dim_b)
+        real(wp), intent(in) :: alpha, beta
+        integer :: i
+        real(wp), allocatable :: rand_norm(:,:)
+        allocate(rand_norm(dim_a, dim_b))
+        
+        do i = 1, dim_b
+            rand_norm = rn%norm_rvs(dim_a, dim_b)
+            rvs(:,i) = 1.0_wp / (beta * sum(rand_norm**2 / (2.0_wp * alpha), 1))
+        end do
+
+        deallocate(rand_norm)
+    end function inv_gamma1_rvs
 
   function beta_rvs(rn, dim_a, dim_b, a, b) result(rvs)
 

@@ -54,6 +54,7 @@ module fortress_prior_t
   integer, parameter :: PARA_INVGAMMA = 4
   integer, parameter :: PARA_UNIFORM = 5
   integer, parameter :: PARA_FIXED = 6
+  integer, parameter :: PARA_INVGAMMA1 = 7
 
   integer, parameter :: PRIOR_FILE_UNIT = 26
 
@@ -126,6 +127,10 @@ contains
        case( PARA_FIXED )
           pr%plower(i) = pr%pval(i)
           pr%pupper(i) = pr%pval(i)
+       case( PARA_INVGAMMA1 )
+          pr%plower(i) = 0.0000001d0
+          pr%pupper(i) = 50.000000d0
+
        case default
           print*,'ERROR: in prior(.), parameter', i, 'has a misspecified prior'
           stop
@@ -201,6 +206,10 @@ contains
              a = pmean(i)
              b = pstdd(i)
              logprior = logprior + log(1.0d0/(b - a))
+          !case ( PARA_INVGAMMA1)
+          !    a = pmean(i)
+          !    b = pstdd(i)
+          !    logprior = logprior + logig1pdf(para(i), a, b)
          end select
       end do
     end associate

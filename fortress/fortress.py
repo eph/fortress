@@ -109,18 +109,18 @@ makefile = """
 LIB={lib_path}
 INC={inc_path}
 FPP=fypp
-FRUIT=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
-FLAP=-I$(INC)/flap -L$(LIB) -lflap
-FORTRESS=-I$(INC)/fortress -L$(LIB)/fortress -lfortress
-JSON=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
-
+FRUIT?=-I$(INC)/fruit -L$(LIB) -lfruit -Wl,-rpath=$(LIB)
+FLAP?=-I$(INC)/flap -L$(LIB) -lflap
+FORTRESS?=-I$(INC)/fortress -L$(LIB)/fortress -lfortress
+JSON?=-I$(INC)/json-fortran -L$(LIB)/json-fortran -ljsonfortran
+LAPACK?=-l{lapack}
 FC={f90} -O3 -ffree-line-length-1000 #-Wall -fcheck=all -g -fbacktrace
 
 smc_driver : {model_file} smc_driver.f90 
-\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o smc 
+\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) $(LAPACK) -Wl,--end-group -o smc 
 
 check_likelihood : {model_file} check_likelihood.f90 
-\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) -l{lapack} -Wl,--end-group -o check_likelihood 
+\t$(FC) $^  -I. -Wl,--start-group $(FORTRESS) $(JSON) $(FLAP) $(FRUIT) $(LAPACK) -Wl,--end-group -o check_likelihood 
 """
 
 import os
@@ -228,7 +228,7 @@ def make_model_file(lik,npara,T,other_functions='',other_includes=''):
     return simplefile.format(lik=lik, npara=npara, T=T, other_functions=other_functions,other_includes=other_includes)
 
 
-def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
+def make_smc(model_file, output_directory='_fortress_tmp', other_files=None, env='',
              lib_path=lib_path,inc_path=inc_path, f90='mpif90', lapack='openblas',check=True):
     """
     Makes an smc driver.
@@ -280,7 +280,7 @@ def make_smc(model_file, output_directory='_fortress_tmp', other_files=None,
 
 
 
-    proc = subprocess.run('cd {} && make smc_driver'.format(os.path.abspath(tmp_dir)),
+    proc = subprocess.run('cd "{}" && make smc_driver {}'.format(os.path.abspath(tmp_dir), env),
                           shell=True, check=check, stderr=subprocess.STDOUT, env=my_env)
 
     return(SMCDriver(os.path.abspath(os.path.join(tmp_dir,'smc'))))
