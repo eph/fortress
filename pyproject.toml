@@ -1,27 +1,24 @@
 [build-system]
-requires = [
-  "setuptools>=61",
-  "wheel",
-]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.10", "numpy>=2", "fypp>=3.1"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "fortress"
 version = "0.1.5"
-description = "Python helpers for building and running Fortress SMC models"
+description = "Fortran tools (with Python bindings) for Bayesian time series"
 readme = "README.md"
-keywords = ["fortress", "fortran", "smc", "bayesian"]
-# Specify only runtime requirements used by the package at import/runtime
-dependencies = [
-  "numpy",
-  "pandas",
-  "tqdm",
-]
-# Uncomment and adjust if you want to enforce a minimum Python version
-# requires-python = ">=3.8"
+requires-python = ">=3.10"
+authors = [{name = "Ed Herbst"}]
+dependencies = ["numpy", "pandas", "tqdm"]
 
-[tool.setuptools]
-include-package-data = true
+[project.scripts]
+fortress-smc = "fortress._cli:run_smc"
 
-[tool.setuptools.packages.find]
-include = ["fortress"]
+[tool.scikit-build]
+wheel.expand-macos-universal-tags = true
+build.verbose = false
+
+[tool.scikit-build.cmake.define]
+ENABLE_MPI = { env = "ENABLE_MPI", default = "OFF" }
+USE_SYSTEM_JSONFORTRAN = { env = "USE_SYSTEM_JSONFORTRAN", default = "OFF" }
+USE_SYSTEM_FLAP = { env = "USE_SYSTEM_FLAP", default = "OFF" }

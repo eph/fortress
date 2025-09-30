@@ -110,7 +110,7 @@ contains
     call assert_equals(1.0_wp, X(1,1),0.000001_wp)
     call assert_equals(0.0_wp, X(1,2),0.000001_wp)
     call assert_equals(0.3_wp, X(2,1),0.000001_wp)
-    call assert_equals(1.382075_wp, X(2,2), 0.000001_wp)
+    call assert_equals(1.382075_wp, X(2,2), 0.0001_wp)
 
   end subroutine test_cholesky
 

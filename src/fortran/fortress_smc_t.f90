@@ -14,8 +14,13 @@ module fortress_smc_t
   use fortress_smc_utilities, only: generate_random_blocks, ess_gap, bisection
   use json_module, only: json_core, json_value
   use fortress_info
-
-  use mpi
+#:if defined('ENABLE_MPI')
+  use mpi_f08, only: MPI_Barrier, MPI_Bcast, MPI_Comm_size, MPI_Comm_rank, MPI_DOUBLE_PRECISION, MPI_Gather, MPI_INTEGER, &
+       MPI_MIN, MPI_Scatter, MPI_SUM, MPI_COMM_WORLD
+#:endif
+#:if defined('ENABLE_OPENMP')
+  use omp_lib
+#:endif
 
   implicit none
 
@@ -71,6 +76,7 @@ module fortress_smc_t
      real(wp) :: resample_tol
      real(wp) :: bisection_thresh
      real(wp) :: target_acpt = 0.25_wp
+     logical :: verbose = .true.
    contains
      procedure :: estimate
      procedure :: draw_from_prior
@@ -130,6 +136,7 @@ contains
 
     integer :: rank
     integer :: err
+    logical :: quiet_flag
     allocate(smc%model, source=model_p)
 
     smc%cli = initialize_cli()
@@ -159,8 +166,16 @@ contains
     call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
     call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err); if(err/=0) stop 1
-    print*,'Initializing SMC for model: ', smc%model%name
-    print*, smc%npart, smc%nphi
+    call smc%cli%get(switch='-q',val=quiet_flag,error=err); if (err/=0) stop 1
+    smc%verbose = .not. quiet_flag
+    if (smc%verbose) then
+       print*,'Initializing SMC for model: ', smc%model%name
+       print*, smc%npart, smc%nphi
+    end if
+
+#:if not defined('ENABLE_MPI')
+    nproc = 1
+#:endif
 
     if (.not.(mod(smc%npart, nproc) == 0)) then
        write(stderr, '(a)') 'ERROR: npart must be divisible by nsim!'
@@ -176,7 +191,7 @@ contains
     if (smc%T_write_thresh == -1) smc%T_write_thresh = smc%model%T
 
     if (smc%endog_tempering) then
-       print*,'Using endogenous tempering (on full sample only).'
+       if (smc%verbose) print*,'Using endogenous tempering (on full sample only).'
        smc%temp = tempering_schedule(nstages=100000, lambda=0.0_wp, max_T=32)
        select type(mod => smc%model )
        class is (fortress_lgss_model)
@@ -272,7 +287,7 @@ contains
           parasim%particles = self%model%prior%rvs(self%npart, rng=self%rng)
        else
           call read_array_from_file(self%init_file, parasim%particles)
-          print*,'Reading particles from', self%init_file
+          if (self%verbose) print*,'Reading particles from', self%init_file
        end if
        call json%create_object(json_p,'')
        call json%add(json_p, 'model_name', self%model%name)
@@ -303,8 +318,10 @@ contains
        previous_T = self%temp%T_schedule(i-1)
        current_T = self%temp%T_schedule(i)
 
-       print*,'Stage', i, 'of', self%temp%nstages, 'with', current_T, 'observations'
-       print*,'last stage had', previous_T, 'observations'
+       if (self%verbose) then
+          print*,'Stage', i, 'of', self%temp%nstages, 'with', current_T, 'observations'
+          print*,'last stage had', previous_T, 'observations'
+       end if
 
        phi = self%temp%phi_schedule(i)
        phi_old = self%temp%phi_schedule(i-1)
@@ -374,11 +391,13 @@ contains
 
           self%temp%ESS_estimates(i) = parasim%ESS()
           if (isnan(self%temp%ESS_estimates(i) )) stop
-          print*,'============================================================='
-          write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
-          write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
-          write(*,'(A,I4,A,F8.5,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
-          write(*,'(A,F8.2, A, I8.0)',advance='no')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
+          if (self%verbose) then
+             print*,'============================================================='
+             write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
+             write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
+             write(*,'(A,I4,A,F8.5,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
+             write(*,'(A,F8.2, A, I8.0)',advance='no')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
+          end if
           !------------------------------------------------------------
           ! Selection
           !------------------------------------------------------------
@@ -386,7 +405,7 @@ contains
           if ((self%temp%ESS_estimates(i) < self%npart * 0.5_wp) .or. &
               (self%resample_every_period .eqv. .true.))then 
              !.or. (self%endog_tempering)) then
-             write(*,'(A)') ' [resampling]'
+             if (self%verbose) write(*,'(A)') ' [resampling]'
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
@@ -394,17 +413,19 @@ contains
              parasim%loglhold = parasim%loglhold(resample_ind)
 
           else
-             print*, ''
+             if (self%verbose) print*, ''
           end if
 
           eps = self%rng%norm_rvs(self%model%npara, self%npart*self%nintmh)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
-          write(*,'(A)') '             mu    std'
-          write(*,'(A)') '           -----  -----'
-          do bj = 1, self%model%npara
-             write(*, '(A,I3,A,F7.3,F7.3)') 'para[',bj,']',mean(bj), sqrt(variance(bj,bj))
-          end do
+          if (self%verbose) then
+             write(*,'(A)') '             mu    std'
+             write(*,'(A)') '           -----  -----'
+             do bj = 1, self%model%npara
+                write(*, '(A,I3,A,F7.3,F7.3)') 'para[',bj,']',mean(bj), sqrt(variance(bj,bj))
+             end do
+          end if
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
@@ -412,24 +433,33 @@ contains
 
        end if
 
-       ! for endogenous tempering wiht multiprocessing
-       call mpi_barrier(MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(self%temp%nstages, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(phi, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-
+       ! for endogenous tempering with multiprocessing
        self%temp%phi_schedule(i) = phi
 
-       call mpi_scatter(eps, self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, nodeeps, &
-            self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-       call mpi_scatter(u, self%ngap*self%nintmh*self%nblocks, MPI_DOUBLE_PRECISION, nodeu, &
-            self%ngap*self%nintmh*self%nblocks, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(variance, self%model%npara*self%model%npara, MPI_DOUBLE_PRECISION, &
-            0, MPI_COMM_WORLD, mpierror)
+       if (self%nproc > 1) then
+#:if defined('ENABLE_MPI')
+          call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+          call MPI_Bcast(self%temp%nstages, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
+          call MPI_Bcast(phi, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
 
-       call mpi_bcast(ind, self%model%npara, MPI_INTEGER, &
-            0, MPI_COMM_WORLD, mpierror)
-       call mpi_bcast(break_points, self%nblocks+1, MPI_INTEGER, &
-            0, MPI_COMM_WORLD, mpierror)
+          call MPI_Scatter(eps, self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, nodeeps, &
+               self%ngap*self%nintmh*self%model%npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+          call MPI_Scatter(u, self%ngap*self%nintmh*self%nblocks, MPI_DOUBLE_PRECISION, nodeu, &
+               self%ngap*self%nintmh*self%nblocks, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+          call MPI_Bcast(variance, self%model%npara*self%model%npara, MPI_DOUBLE_PRECISION, &
+               0, MPI_COMM_WORLD, mpierror)
+
+          call MPI_Bcast(ind, self%model%npara, MPI_INTEGER, &
+               0, MPI_COMM_WORLD, mpierror)
+          call MPI_Bcast(break_points, self%nblocks+1, MPI_INTEGER, &
+               0, MPI_COMM_WORLD, mpierror)
+#:else
+          error stop 'MPI support disabled but nproc > 1 requested'
+#:endif
+       else
+          nodeeps = eps
+          nodeu = u
+       end if
        call scatter_particles(parasim, nodepara)
 
 
@@ -646,10 +676,14 @@ contains
 
 
        end do
-
-
-       call mpi_gather(nodeacpt, self%ngap*self%model%npara, MPI_INTEGER, &
-            acptsim, self%ngap*self%model%npara, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror )
+       if (self%nproc > 1) then
+#:if defined('ENABLE_MPI')
+          call MPI_Gather(nodeacpt, self%ngap*self%model%npara, MPI_INTEGER, &
+               acptsim, self%ngap*self%model%npara, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
+#:endif
+       else
+          acptsim = nodeacpt
+       end if
        call gather_particles(parasim, nodepara)
 
        if (rank == 0) then
@@ -700,22 +734,30 @@ contains
        if ((self%endog_tempering) .and. (phi == 1.0_wp)) then
           self%temp%T_schedule(i+1:self%temp%nstages) = current_T + 1
        end if
-       call mpi_bcast(scale, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-       !call mpi_bcast(self%L, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
-       call mpi_barrier(MPI_COMM_WORLD, mpierror)
+       if (self%nproc > 1) then
+#:if defined('ENABLE_MPI')
+          call MPI_Bcast(scale, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+          !call MPI_Bcast(self%L, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, mpierror)
+          call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
+       end if
 
        i = i + 1
     end do
 
     if (rank==0) then
-       print*,''
-       print*,'Finished SMC sampler! Writing output to '//self%output_file
+       if (self%verbose) then
+          print*,''
+          print*,'Finished SMC sampler! Writing output to '//self%output_file
+       end if
        call self%temp%write_json(json_p)
        call json%print(json_p, self%output_file)
        call json%destroy(json_p)
     end if
 
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (self%nproc > 1) call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
   end subroutine estimate
 
 
@@ -723,42 +765,74 @@ contains
 
     type(fortress_smc_particles), intent(inout) :: parasim, nodepara
 
-    integer :: ngap, npara, mpierror
+    integer :: ngap, npara
+#:if defined('ENABLE_MPI')
+    integer :: mpierror
+#:endif
 
     ngap = nodepara%npart
     npara = nodepara%nvars
 
-    call mpi_scatter(parasim%particles, ngap*npara, MPI_DOUBLE_PRECISION, &
-         nodepara%particles, ngap*npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-    call mpi_scatter(parasim%weights, ngap, MPI_DOUBLE_PRECISION, nodepara%weights, &
-         ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-    call mpi_scatter(parasim%loglh, ngap, MPI_DOUBLE_PRECISION, nodepara%loglh, ngap, &
-         MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-    call mpi_scatter(parasim%prior, ngap, MPI_DOUBLE_PRECISION, nodepara%prior, ngap, &
-         MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (ngap < parasim%npart) then
+       call MPI_Scatter(parasim%particles, ngap*npara, MPI_DOUBLE_PRECISION, &
+            nodepara%particles, ngap*npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call MPI_Scatter(parasim%weights, ngap, MPI_DOUBLE_PRECISION, nodepara%weights, &
+            ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call MPI_Scatter(parasim%loglh, ngap, MPI_DOUBLE_PRECISION, nodepara%loglh, ngap, &
+            MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call MPI_Scatter(parasim%loglhold, ngap, MPI_DOUBLE_PRECISION, nodepara%loglhold, ngap, &
+            MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call MPI_Scatter(parasim%prior, ngap, MPI_DOUBLE_PRECISION, nodepara%prior, ngap, &
+            MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror)
+       call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+       return
+    end if
+#:endif
+
+    nodepara%particles = parasim%particles
+    nodepara%weights = parasim%weights
+    nodepara%loglh = parasim%loglh
+    nodepara%loglhold = parasim%loglhold
+    nodepara%prior = parasim%prior
 
   end subroutine scatter_particles
 
   subroutine gather_particles(parasim, nodepara)
     type(fortress_smc_particles), intent(inout) :: parasim, nodepara
 
-    integer :: ngap, npara, mpierror
+    integer :: ngap, npara
+#:if defined('ENABLE_MPI')
+    integer :: mpierror
+#:endif
 
     ngap = nodepara%npart
     npara = nodepara%nvars
 
-    call mpi_gather(nodepara%weights, ngap, MPI_DOUBLE_PRECISION, parasim%weights, &
-        ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
-    call mpi_gather(nodepara%loglh, ngap, MPI_DOUBLE_PRECISION, parasim%loglh, &
-         ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
-    call mpi_gather(nodepara%prior, ngap, MPI_DOUBLE_PRECISION, parasim%prior, &
-         ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
-    call mpi_gather(nodepara%particles, ngap*npara, MPI_DOUBLE_PRECISION, parasim%particles, &
-         ngap*npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+#:if defined('ENABLE_MPI')
+    if (ngap < parasim%npart) then
+       call MPI_Gather(nodepara%weights, ngap, MPI_DOUBLE_PRECISION, parasim%weights, &
+           ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+       call MPI_Gather(nodepara%loglh, ngap, MPI_DOUBLE_PRECISION, parasim%loglh, &
+            ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+       call MPI_Gather(nodepara%loglhold, ngap, MPI_DOUBLE_PRECISION, parasim%loglhold, &
+            ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+       call MPI_Gather(nodepara%prior, ngap, MPI_DOUBLE_PRECISION, parasim%prior, &
+            ngap, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+       call MPI_Gather(nodepara%particles, ngap*npara, MPI_DOUBLE_PRECISION, parasim%particles, &
+            ngap*npara, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, mpierror )
+       call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+       return
+    end if
+#:endif
 
-    call mpi_barrier(MPI_COMM_WORLD, mpierror)
-   end subroutine gather_particles
+    parasim%particles = nodepara%particles
+    parasim%weights = nodepara%weights
+    parasim%loglh = nodepara%loglh
+    parasim%loglhold = nodepara%loglhold
+    parasim%prior = nodepara%prior
+
+  end subroutine gather_particles
 
 
 
@@ -829,6 +903,9 @@ contains
     call cli%add(switch='--T-write-thresh', switch_ab='-twt', &
          help='T to start writing posterior at', &
          required=.false.,act='store',def='-1', error=error)
+    call cli%add(switch='--quiet', switch_ab='-q', &
+         help='Suppress progress logging', &
+         required=.false., act='store_true', def='.false.', error=error)
 
 
 

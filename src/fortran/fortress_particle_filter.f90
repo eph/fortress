@@ -1,13 +1,18 @@
 module fortress_particle_filter_t
   use, intrinsic :: iso_fortran_env, only: wp => real64
+#:if defined('ENABLE_MPI')
+  use mpi_f08, only: MPI_COMM_WORLD, MPI_DOUBLE_PRECISION, MPI_INTEGER, MPI_MIN, MPI_SUM, MPI_Request, MPI_Status, &
+       MPI_Allgather, MPI_Allreduce, MPI_Barrier, MPI_Irecv, MPI_Isend, MPI_Wait
+#:endif
+#:if defined('ENABLE_OPENMP')
+  use omp_lib
+#:endif
 
   use fortress_bayesian_model_t, only: fortress_ss_model
   use fortress_particles_t, only: fortress_particles
   use fortress_random_t, only: fortress_random
 
   implicit none
-
-  include 'mpif.h'
 
   type ParallelParticleFilter
 
@@ -49,22 +54,31 @@ contains
     allocate(ppf%m, source=m)
 
     if (present(npart)) ppf%npart = npart
-    if (present(npart)) ppf%nproc = nproc
+    if (present(nproc)) ppf%nproc = nproc
 
     !if (present(nlocalpart)) ppf%nlocalpart = nlocalpart
     !if (present(nforeignpart)) ppf%nforeignpart = nforeignpart
     !if (present(naltpart)) ppf%naltpart = naltpart
 
-    ppf%nlocalpart = ppf%npart / ppf%nproc
+#:if defined('ENABLE_MPI')
+    ppf%nlocalpart = ppf%npart / max(ppf%nproc, 1)
 
-    if (nproc==1) then
+    if (ppf%nproc > 1) then
+       ppf%nforeignpart = ppf%nlocalpart / 1.5d0
+       ppf%naltpart = ppf%nlocalpart / 2.0d0
+       ppf%USE_MPI = .true.
+    else
        ppf%nforeignpart = 0.0_wp
        ppf%naltpart = 0.0_wp
        ppf%USE_MPI = .false.
-    else
-       ppf%nforeignpart = ppf%nlocalpart / 1.5d0
-       ppf%naltpart = ppf%nlocalpart / 2.0d0
     end if
+#:else
+    ppf%nproc = 1
+    ppf%nlocalpart = ppf%npart
+    ppf%nforeignpart = 0.0_wp
+    ppf%naltpart = 0.0_wp
+    ppf%USE_MPI = .false.
+#:endif
     
     if (rank==0) then
        print *, 'Initializing a parallel particle filter '
@@ -120,26 +134,20 @@ contains
     integer :: regime(2)
     integer :: left, right
     integer :: mpierror
-    integer :: mpi_recv_status1(MPI_Status_Size)
-    integer :: mpi_recv_status2(MPI_Status_Size)
-    integer :: mpi_recv_status3(MPI_Status_Size)
-    integer :: mpi_recv_status4(MPI_Status_Size)
+#:if defined('ENABLE_MPI')
+    type(MPI_Status) :: mpi_recv_status1, mpi_recv_status2, mpi_recv_status3, mpi_recv_status4
+    type(MPI_Status) :: mpi_send_status1, mpi_send_status2, mpi_send_status3, mpi_send_status4
 
+    type(MPI_Request) :: mpi_req_recv1
+    type(MPI_Request) :: mpi_req_recv2
+    type(MPI_Request) :: mpi_req_recv3
+    type(MPI_Request) :: mpi_req_recv4
 
-    integer :: mpi_send_status1(MPI_Status_Size)
-    integer :: mpi_send_status2(MPI_Status_Size)
-    integer :: mpi_send_status3(MPI_Status_Size)
-    integer :: mpi_send_status4(MPI_Status_Size)
-
-    integer :: mpi_req_recv1
-    integer :: mpi_req_recv2
-    integer :: mpi_req_recv3
-    integer :: mpi_req_recv4
-
-    integer :: mpi_req_send1
-    integer :: mpi_req_send2
-    integer :: mpi_req_send3
-    integer :: mpi_req_send4
+    type(MPI_Request) :: mpi_req_send1
+    type(MPI_Request) :: mpi_req_send2
+    type(MPI_Request) :: mpi_req_send3
+    type(MPI_Request) :: mpi_req_send4
+#:endif
 
     character(len=5) :: rb, char_rank, char_t
     character(len=200) :: out_str
@@ -148,18 +156,23 @@ contains
     save_states_opt = .false.
     if (present(save_states)) save_states_opt = save_states
 
+#:if defined('ENABLE_MPI')
     if (ppf%USE_MPI) then
        converged = ppf%m%solve(para, nproc, rank)
     else
        converged = ppf%m%solve(para)
-       call mpi_init()
     end if
+#:else
+    converged = ppf%m%solve(para)
+#:endif
        
     if (rank==0) print*,'entering particle filter'
     lik = 0.0d0
 
 
-    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (ppf%USE_MPI) call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
 
     if (converged .eqv. .false.) then
        lik = -1000000000000.0d0
@@ -186,14 +199,22 @@ contains
     endogsteady = ppf%m%steadystate(para)
     old_local%particles = 0.0d0
 
+#:if defined('ENABLE_OPENMP')
+    !$omp parallel do if (.not. ppf%USE_MPI) default(shared) private(j)
+#:endif
     do j = 1, ppf%m%ns
        old_local%particles(j,:) = endogsteady(j)
     end do
+#:if defined('ENABLE_OPENMP')
+    !$omp end parallel do
+#:endif
 
 
     !if (rank==0) call ppf%m%describe_params()
     !if (rank==0) print*, old_local%particles(:,1)
-    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (ppf%USE_MPI) call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
 
     !if (rank==0) print*,'entering first initializaztion'
     ! first initialization
@@ -240,7 +261,9 @@ contains
 
 
     ! second initialization
-    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (ppf%USE_MPI) call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
     !if (rank==0) print*,'entering second initialization'
 
     do t = 1, ppf%initialization_T
@@ -268,7 +291,9 @@ contains
     end if
     old_copy = old_local 
 
-    if (ppf%USE_MPI) call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+    if (ppf%USE_MPI) call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
 
     old_copy%weights = 1.0d0 / (ppf%nlocalpart * nproc)
     old_local%weights = 1.0d0 / (ppf%nlocalpart * nproc)
@@ -281,16 +306,18 @@ contains
     do t = 1, ppf%m%T
 
 
+#:if defined('ENABLE_MPI')
        if (ppf%USE_MPI) then
-          call mpi_irecv(old_foreign%particles, ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+          call MPI_Irecv(old_foreign%particles, ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
                left, 1, MPI_COMM_WORLD, mpi_req_recv1, mpierror)
-          call mpi_irecv(old_foreign%weights, ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+          call MPI_Irecv(old_foreign%weights, ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
                left, 1, MPI_COMM_WORLD, mpi_req_recv2, mpierror)
-          call mpi_isend(old_copy%particles(:,1:ppf%nforeignpart), ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+          call MPI_Isend(old_copy%particles(:,1:ppf%nforeignpart), ppf%m%ns*ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
                right, 1, MPI_COMM_WORLD, mpi_req_send1, mpierror)
-          call mpi_isend(old_copy%weights(1:ppf%nforeignpart), ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
+          call MPI_Isend(old_copy%weights(1:ppf%nforeignpart), ppf%nforeignpart, MPI_DOUBLE_PRECISION, &
                right, 1, MPI_COMM_WORLD, mpi_req_send2, mpierror)
        end if
+#:endif
        ! draw shocks and regimes
        shocks = ppf%rng%norm_rvs(ppf%m%neps, ppf%nlocalpart)
 
@@ -316,14 +343,18 @@ contains
           new_local%weights(j) = old_local%weights(ppf%nforeignpart+j) * incwt 
        end do
 
-       if (ppf%USE_MPI) call mpi_wait(mpi_req_recv1, mpi_recv_status1, mpierror) 
+#:if defined('ENABLE_MPI')
+       if (ppf%USE_MPI) call MPI_Wait(mpi_req_recv1, mpi_recv_status1, mpierror)
+#:endif
 
        do j = 1, ppf%nforeignpart
           new_local%particles(:,foreignpartstart+j) = ppf%m%policy_function(old_foreign%particles(:,j), &
                shocks(:,foreignpartstart+j))
        end do
 
-       if (ppf%USE_MPI) call mpi_wait(mpi_req_recv2, mpi_recv_status2, mpierror)
+#:if defined('ENABLE_MPI')
+       if (ppf%USE_MPI) call MPI_Wait(mpi_req_recv2, mpi_recv_status2, mpierror)
+#:endif
 
        do j = 1, ppf%nforeignpart
           incwt = ppf%m%pdfy(t, new_local%particles(:, foreignpartstart+j), &
@@ -332,18 +363,26 @@ contains
           new_local%weights(foreignpartstart+j) = old_foreign%weights(j) * incwt
        end do
 
-       if (ppf%USE_MPI) call mpi_wait(mpi_req_send1, mpi_send_status1,mpierror)
-       if (ppf%USE_MPI) call mpi_wait(mpi_req_send2, mpi_send_status2,mpierror)
+#:if defined('ENABLE_MPI')
+       if (ppf%USE_MPI) call MPI_Wait(mpi_req_send1, mpi_send_status1, mpierror)
+       if (ppf%USE_MPI) call MPI_Wait(mpi_req_send2, mpi_send_status2, mpierror)
+#:endif
 
        ! could be speed up
        if (ppf%adjusted_proposal(t)) then
 
-          do j = 1, ppf%nlocalpart
-             kap = is_sampling_std ** ppf%m%neps &
-                  * exp(-0.5d0 * dot_product(shocks(:,j),shocks(:,j))) &
-                  / exp(-0.5d0 * dot_product(shocks(:,j)-is_sampling_mu, shocks(:,j)-is_sampling_mu) / is_sampling_std ** 2)
-             new_local%weights(j) = new_local%weights(j) * kap
-          end do
+#:if defined('ENABLE_OPENMP')
+       !$omp parallel do if (.not. ppf%USE_MPI) default(shared) private(j)
+#:endif
+       do j = 1, ppf%nlocalpart
+          kap = is_sampling_std ** ppf%m%neps &
+               * exp(-0.5d0 * dot_product(shocks(:,j),shocks(:,j))) &
+               / exp(-0.5d0 * dot_product(shocks(:,j)-is_sampling_mu, shocks(:,j)-is_sampling_mu) / is_sampling_std ** 2)
+          new_local%weights(j) = new_local%weights(j) * kap
+       end do
+#:if defined('ENABLE_OPENMP')
+       !$omp end parallel do
+#:endif
        end if
 
 
@@ -357,7 +396,15 @@ contains
        ! check the particles
        call new_local%normalize_weights(py)
        ess = new_local%ess()
-       if (ppf%USE_MPI) call mpi_allreduce(ess, min_ess, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, mpierror)         
+#:if defined('ENABLE_MPI')
+       if (ppf%USE_MPI) then
+          call MPI_Allreduce(ess, min_ess, 1, MPI_DOUBLE_PRECISION, MPI_MIN, MPI_COMM_WORLD, mpierror)
+       else
+          min_ess = ess
+       end if
+#:else
+       min_ess = ess
+#:endif
        !new_local%weights = new_local%weights * relative_weight 
 
        ! check lnpy
@@ -375,8 +422,12 @@ contains
        ! end if
        ! totsumproby = 0.0d0
        py_across_procs = 0.0d0
-       if (ppf%USE_MPI) then 
-          call mpi_allreduce(py, py_across_procs, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpierror)
+       if (ppf%USE_MPI) then
+#:if defined('ENABLE_MPI')
+          call MPI_Allreduce(py, py_across_procs, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, mpierror)
+#:else
+          py_across_procs = py
+#:endif
        else
           py_across_procs = py
        end if
@@ -392,10 +443,11 @@ contains
        old_local = new_local
 
 
+#:if defined('ENABLE_MPI')
        if (ppf%USE_MPI) then
           py = sum(old_local%weights)
           py_vector = 0.0d0
-          call mpi_allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
+          call MPI_Allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
           effective_procs = 1.0d0 / sum(py_vector**2)
 
           !if (rank==0) print*,'before passing', t, effective_procs 
@@ -411,41 +463,43 @@ contains
              !print*,'left', left, 'partner', partner
 
              ! pass the last nalt particlse
-             call mpi_barrier(MPI_COMM_WORLD, mpierror)
+             call MPI_Barrier(MPI_COMM_WORLD, mpierror)
 
              alt_copy%particles = old_local%particles(:,ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
              alt_copy%weights = old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart)
 
-             call mpi_irecv(alt_foreign%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
+             call MPI_Irecv(alt_foreign%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
                   partner, 2, MPI_COMM_WORLD, mpi_req_recv3, mpierror)
-             call mpi_irecv(alt_foreign%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, &
+             call MPI_Irecv(alt_foreign%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, &
                   2, MPI_COMM_WORLD, mpi_req_recv4, mpierror)
 
-             call mpi_isend(alt_copy%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
+             call MPI_Isend(alt_copy%particles, ppf%m%ns*ppf%naltpart, MPI_DOUBLE_PRECISION, &
                   partner, 2, MPI_COMM_WORLD, mpi_req_send3, mpierror)
-             call mpi_isend(alt_copy%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, 2, &
+             call MPI_Isend(alt_copy%weights, ppf%naltpart, MPI_DOUBLE_PRECISION, partner, 2, &
                   MPI_COMM_WORLD, mpi_req_send4, mpierror)
 
-             call mpi_wait(mpi_req_send3, mpi_send_status3, mpierror)
-             call mpi_wait(mpi_req_send4, mpi_send_status4, mpierror)
-             call mpi_wait(mpi_req_recv3, mpi_recv_status3, mpierror)
-             call mpi_wait(mpi_req_recv4, mpi_recv_status4, mpierror)
+             call MPI_Wait(mpi_req_send3, mpi_send_status3, mpierror)
+             call MPI_Wait(mpi_req_send4, mpi_send_status4, mpierror)
+             call MPI_Wait(mpi_req_recv3, mpi_recv_status3, mpierror)
+             call MPI_Wait(mpi_req_recv4, mpi_recv_status4, mpierror)
 
              old_local%particles(:, ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%particles
              old_local%weights(ppf%nlocalpart-ppf%naltpart+1:ppf%nlocalpart) = alt_foreign%weights
 
-             py = sum(old_local%weights)
-             py_vector = 0.0d0
-             call mpi_allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
-             effective_procs = 1.0d0 / sum(py_vector**2)
-             !if (rank==0) print*, 'after passing', t, effective_procs 
+            py = sum(old_local%weights)
+            py_vector = 0.0d0
+            call MPI_Allgather(py, 1, MPI_DOUBLE_PRECISION, py_vector, 1, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, mpierror)
+            effective_procs = 1.0d0 / sum(py_vector**2)
+            !if (rank==0) print*, 'after passing', t, effective_procs 
 
-          end if
+         end if
 
-          old_copy%particles = old_local%particles(:,1:ppf%nforeignpart)
-          old_copy%weights = old_local%weights(1:ppf%nforeignpart)
+         old_copy%particles = old_local%particles(:,1:ppf%nforeignpart)
+         old_copy%weights = old_local%weights(1:ppf%nforeignpart)
 
        end if
+#:endif
+       if (.not. ppf%USE_MPI) effective_procs = 1.0d0
        if (save_states_opt) then
           write(char_rank,'(I3.3)') rank
           write(char_t, '(I3.3)') t
@@ -453,7 +507,9 @@ contains
           call old_copy%write(out_str)
        end if
 
-       call mpi_barrier(MPI_COMM_WORLD, mpierror)
+#:if defined('ENABLE_MPI')
+       call MPI_Barrier(MPI_COMM_WORLD, mpierror)
+#:endif
        !print*,rank,py_vector
     end do
 
@@ -467,4 +523,3 @@ contains
 
   end function lik
 end module fortress_particle_filter_t
-

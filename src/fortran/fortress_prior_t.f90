@@ -48,8 +48,8 @@ module fortress_prior_t
   end interface fortress_abstract_prior
 
 
-  integer, parameter :: PARA_GAMMA = 1
-  integer, parameter :: PARA_BETA = 2
+  integer, parameter :: PARA_BETA = 1
+  integer, parameter :: PARA_GAMMA = 2
   integer, parameter :: PARA_NORMAL = 3
   integer, parameter :: PARA_INVGAMMA = 4
   integer, parameter :: PARA_UNIFORM = 5
