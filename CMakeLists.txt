@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
-project(fortress LANGUAGES C Fortran)
+project(fortress VERSION 0.1.5 LANGUAGES C Fortran)
 
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 include(CTest)
 
 # Build all libraries with PIC so they can link into the Python module.
@@ -45,6 +46,7 @@ if(USE_SYSTEM_JSONFORTRAN)
     INTERFACE_LINK_LIBRARIES "${JSONFORTRAN_LIBRARIES}"
   )
   set(JSONFORTRAN_TARGET jsonfortran)
+  set(JSONFORTRAN_PROVIDER_TARGET jsonfortran)
 else()
   include(cmake/FetchJSONFortran.cmake)
   # JSON-Fortran upstream uses a few different target names depending on
@@ -57,9 +59,15 @@ else()
       break()
     endif()
   endforeach()
+  if(JSONFORTRAN_TARGET)
+    set(JSONFORTRAN_PROVIDER_TARGET ${JSONFORTRAN_TARGET})
+  endif()
   if(NOT JSONFORTRAN_TARGET)
     # Fall back to a sensible default name
     set(JSONFORTRAN_TARGET jsonfortran)
+  endif()
+  if(NOT JSONFORTRAN_PROVIDER_TARGET)
+    set(JSONFORTRAN_PROVIDER_TARGET jsonfortran)
   endif()
 endif()
 
@@ -191,9 +199,9 @@ function(fortress_configure_fortran_target target_name)
     endif()
   endif()
 
-  if(TARGET ${JSONFORTRAN_TARGET})
-    get_target_property(_json_iface_inc ${JSONFORTRAN_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(_json_mod_dir   ${JSONFORTRAN_TARGET} Fortran_MODULE_DIRECTORY)
+  if(JSONFORTRAN_PROVIDER_TARGET AND TARGET ${JSONFORTRAN_PROVIDER_TARGET})
+    get_target_property(_json_iface_inc ${JSONFORTRAN_PROVIDER_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(_json_mod_dir   ${JSONFORTRAN_PROVIDER_TARGET} Fortran_MODULE_DIRECTORY)
     if(_json_iface_inc)
       target_include_directories(${target_name} PRIVATE "${_json_iface_inc}")
     endif()
@@ -221,7 +229,7 @@ set_target_properties(fortress_static PROPERTIES
 
 fortress_configure_fortran_target(fortress_static)
 
-target_link_libraries(fortress_static PUBLIC
+target_link_libraries(fortress_static PRIVATE
   ${JSONFORTRAN_TARGET}
   ${FLAP_TARGET}
   ${BLAS_LIBRARIES}
@@ -235,9 +243,9 @@ if(TARGET ${FLAP_TARGET})
 else()
   message(STATUS "FLAP target '${FLAP_TARGET}' not found at configure time; relying on fallback include paths.")
 endif()
-if(TARGET ${JSONFORTRAN_TARGET})
-  add_dependencies(fortress_mod ${JSONFORTRAN_TARGET})
-  add_dependencies(fortress_static ${JSONFORTRAN_TARGET})
+if(JSONFORTRAN_PROVIDER_TARGET AND TARGET ${JSONFORTRAN_PROVIDER_TARGET})
+  add_dependencies(fortress_mod ${JSONFORTRAN_PROVIDER_TARGET})
+  add_dependencies(fortress_static ${JSONFORTRAN_PROVIDER_TARGET})
 endif()
 
 # Ensure generated sources exist before compiling objects (ordering).
@@ -295,6 +303,52 @@ install(DIRECTORY src/fortress/
   FILES_MATCHING PATTERN "*.py"
 )
 
+# For SKBUILD (pip install), also install CMake config and static library to the package
+if(SKBUILD)
+  # Install the static library to the package
+  install(TARGETS fortress_static
+    ARCHIVE DESTINATION fortress/lib
+  )
+
+  # Install Fortran module files
+  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static")
+    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
+      DESTINATION fortress/include
+      FILES_MATCHING PATTERN "*.mod"
+    )
+  endif()
+
+  # Configure and install CMake config files for the package
+  set(FORTRESS_INSTALL_INCLUDEDIR "include")
+  set(FORTRESS_INSTALL_MODDIR "include")
+
+  configure_package_config_file(
+    cmake/fortressConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfig_package.cmake
+    INSTALL_DESTINATION fortress/lib/cmake/fortress
+    PATH_VARS FORTRESS_INSTALL_INCLUDEDIR FORTRESS_INSTALL_MODDIR
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO
+  )
+
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfigVersion_package.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+  )
+
+  install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfig_package.cmake
+    DESTINATION fortress/lib/cmake/fortress
+    RENAME fortressConfig.cmake
+  )
+
+  install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfigVersion_package.cmake
+    DESTINATION fortress/lib/cmake/fortress
+    RENAME fortressConfigVersion.cmake
+  )
+endif()
+
 # --- Optional native drivers (CLI executables) ---
 option(BUILD_DRIVERS "Build native driver executables (e.g., smc_driver)" ON)
 
@@ -325,9 +379,9 @@ if(BUILD_DRIVERS AND ENABLE_MPI)
     endif()
   endif()
 
-  if(TARGET ${JSONFORTRAN_TARGET})
-    get_target_property(_json_iface_inc2 ${JSONFORTRAN_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(_json_mod_dir2   ${JSONFORTRAN_TARGET} Fortran_MODULE_DIRECTORY)
+  if(JSONFORTRAN_PROVIDER_TARGET AND TARGET ${JSONFORTRAN_PROVIDER_TARGET})
+    get_target_property(_json_iface_inc2 ${JSONFORTRAN_PROVIDER_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(_json_mod_dir2   ${JSONFORTRAN_PROVIDER_TARGET} Fortran_MODULE_DIRECTORY)
     if(_json_iface_inc2)
       target_include_directories(smc_driver PRIVATE "${_json_iface_inc2}")
     endif()
@@ -449,4 +503,46 @@ if(BUILD_TESTING AND BUILD_FORTRAN_TESTS)
     endif()
     set_tests_properties(fortress_unit_tests PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
   endif()
+endif()
+
+# --- CMake package export ---------------------------------------------------
+set(FORTRESS_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/fortress")
+
+if(NOT SKBUILD)
+  # Install fortress_static and its module files
+  install(TARGETS fortress_static
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${FORTRESS_INSTALL_INCLUDEDIR}
+  )
+
+  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static")
+    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
+      DESTINATION ${FORTRESS_INSTALL_INCLUDEDIR}
+      FILES_MATCHING PATTERN "*.mod"
+    )
+  endif()
+
+  set(FORTRESS_INSTALL_MODDIR "${FORTRESS_INSTALL_INCLUDEDIR}")
+
+  # Create a simple config file that just sets paths (no target exports for now)
+  configure_package_config_file(
+    cmake/fortressConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fortress
+    PATH_VARS FORTRESS_INSTALL_INCLUDEDIR FORTRESS_INSTALL_MODDIR
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO
+  )
+
+  write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+  )
+
+  install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/fortressConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fortress
+  )
 endif()
