@@ -149,6 +149,7 @@ module fortress_bayesian_model_t
      procedure :: logpdfy_kernel => logpdfy_kernel_lgss
      procedure :: construct_lgss_model
      procedure :: construct_lgss_model_noprior
+     procedure :: construct_lgss_model_noprior_nodata
      procedure(system_matrices_i), public, deferred :: system_matrices
      generic :: construct_model => construct_lgss_model
 
@@ -270,6 +271,34 @@ contains
          self%ZZ(self%nobs, self%ns), self%DD(self%nobs), self%HH(self%nobs, self%nobs))
 
   end subroutine construct_lgss_model_noprior
+
+
+  subroutine construct_lgss_model_noprior_nodata(self, name, npara, nobs, T, ns, neps)
+
+    class(fortress_lgss_model), intent(inout) :: self
+
+    character(len=144), intent(in) :: name
+    integer, intent(in) :: nobs, T, ns, neps, npara
+
+    ! Initialize model parameters without reading prior or data files
+    self%name = name
+    self%datafile = ''  ! No datafile needed
+
+    self%nobs = nobs
+    self%T = T
+    self%npara = npara
+    self%ns = ns
+    self%neps = neps
+
+    allocate(self%p0(npara))
+
+    ! Note: self%yy and self%prior are allocated/initialized by the caller
+    ! This allows for hardcoded data and custom prior types
+
+    allocate(self%TT(self%ns, self%ns), self%RR(self%ns, self%neps), self%QQ(self%neps, self%neps), &
+         self%ZZ(self%nobs, self%ns), self%DD(self%nobs), self%HH(self%nobs, self%nobs))
+
+  end subroutine construct_lgss_model_noprior_nodata
 
 
   !*******************************************************************************
