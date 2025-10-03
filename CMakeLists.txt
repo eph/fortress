@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(fortress VERSION 0.1.5 LANGUAGES C Fortran)
+project(fortress VERSION 0.1.6 LANGUAGES C Fortran)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)

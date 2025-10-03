@@ -49,3 +49,5 @@ conda/
 tools/
 fpm.toml
 batch_estimate.sh
+/fadf
+/fdfa

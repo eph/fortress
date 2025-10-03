@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "fortress"
-version = "0.1.5"
+version = "0.1.6"
 description = "Fortran tools (with Python bindings) for Bayesian time series"
 readme = "README.md"
 requires-python = ">=3.10"
