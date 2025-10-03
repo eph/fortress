@@ -1,0 +1,113 @@
+@PACKAGE_INIT@
+
+# Determine if we're in a Python package install or a system install
+get_filename_component(_fortress_config_dir "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
+get_filename_component(_fortress_package_root "${_fortress_config_dir}/../../.." ABSOLUTE)
+
+# Try to find installation paths first
+set(fortress_MODULE_DIR "${_fortress_package_root}/@FORTRESS_INSTALL_MODDIR@")
+set(fortress_INCLUDE_DIR "${_fortress_package_root}/@FORTRESS_INSTALL_INCLUDEDIR@")
+set(fortress_LIBRARY_DIR "${_fortress_package_root}/lib")
+
+# For development/editable installs, use the build tree directly
+get_filename_component(_fortress_config_dir "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
+set(_fortress_is_build_tree FALSE)
+
+if(NOT EXISTS "${fortress_MODULE_DIR}")
+  # We're in a build tree, not an install tree
+  set(_fortress_is_build_tree TRUE)
+  if(EXISTS "${_fortress_config_dir}/mod_fortress_static")
+    set(fortress_MODULE_DIR "${_fortress_config_dir}/mod_fortress_static")
+  endif()
+  if(EXISTS "${_fortress_config_dir}/libfortress_static.a")
+    set(fortress_LIBRARY_DIR "${_fortress_config_dir}")
+  endif()
+endif()
+
+# Find dependencies that fortress needs
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
+# Find JSON-Fortran and FLAP - needed for linking against fortress_static
+set(_fortress_json_lib "")
+set(_fortress_flap_libs "")
+
+if(_fortress_is_build_tree)
+  # Build tree: look in the build dependency directories
+  set(_fortress_json_path "${_fortress_config_dir}/_deps/jsonfortran-build/lib/libjsonfortran.a")
+  set(_fortress_flap_path "${_fortress_config_dir}/_deps/flap-build/lib/libFLAP.a")
+  set(_fortress_penf_path "${_fortress_config_dir}/_deps/flap-build/src/third_party/PENF/lib/libPENF.a")
+  set(_fortress_face_path "${_fortress_config_dir}/_deps/flap-build/src/third_party/FACE/lib/libFACE.a")
+
+  if(EXISTS "${_fortress_json_path}")
+    set(_fortress_json_lib "${_fortress_json_path}")
+  endif()
+
+  if(EXISTS "${_fortress_flap_path}")
+    list(APPEND _fortress_flap_libs "${_fortress_flap_path}")
+  endif()
+
+  if(EXISTS "${_fortress_penf_path}")
+    list(APPEND _fortress_flap_libs "${_fortress_penf_path}")
+  endif()
+
+  if(EXISTS "${_fortress_face_path}")
+    list(APPEND _fortress_flap_libs "${_fortress_face_path}")
+  endif()
+else()
+  # Installed package: search for installed JSON-Fortran and FLAP in site-packages
+  get_filename_component(_site_packages "${_fortress_package_root}/.." ABSOLUTE)
+
+  # Find JSON-Fortran
+  file(GLOB _json_search_paths "${_site_packages}/jsonfortran*/lib/libjsonfortran.a")
+  if(_json_search_paths)
+    list(GET _json_search_paths 0 _fortress_json_lib)
+  endif()
+
+  # Find FLAP and its dependencies
+  set(_flap_lib "${_site_packages}/lib/libFLAP.a")
+  set(_penf_lib "${_site_packages}/lib/libPENF.a")
+  set(_face_lib "${_site_packages}/lib/libFACE.a")
+
+  if(EXISTS "${_flap_lib}")
+    list(APPEND _fortress_flap_libs "${_flap_lib}")
+  endif()
+  if(EXISTS "${_penf_lib}")
+    list(APPEND _fortress_flap_libs "${_penf_lib}")
+  endif()
+  if(EXISTS "${_face_lib}")
+    list(APPEND _fortress_flap_libs "${_face_lib}")
+  endif()
+endif()
+
+# Create imported target if it doesn't exist
+if(NOT TARGET fortress::fortress_static)
+  add_library(fortress::fortress_static STATIC IMPORTED)
+
+  # Find the actual library file
+  find_library(FORTRESS_LIBRARY
+    NAMES libfortress_static.a fortress_static
+    PATHS "${fortress_LIBRARY_DIR}"
+    NO_DEFAULT_PATH
+  )
+
+  if(FORTRESS_LIBRARY)
+    set(_fortress_link_libs "${BLAS_LIBRARIES};${LAPACK_LIBRARIES}")
+    if(_fortress_json_lib)
+      list(APPEND _fortress_link_libs "${_fortress_json_lib}")
+    endif()
+    if(_fortress_flap_libs)
+      list(APPEND _fortress_link_libs ${_fortress_flap_libs})
+    endif()
+
+    set_target_properties(fortress::fortress_static PROPERTIES
+      IMPORTED_LOCATION "${FORTRESS_LIBRARY}"
+      INTERFACE_INCLUDE_DIRECTORIES "${fortress_MODULE_DIR}"
+      INTERFACE_LINK_LIBRARIES "${_fortress_link_libs}"
+    )
+  else()
+    message(FATAL_ERROR "Could not find fortress_static library in ${fortress_LIBRARY_DIR}")
+  endif()
+endif()
+
+set(fortress_FOUND TRUE)
