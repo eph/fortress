@@ -9,7 +9,10 @@ description = "Fortran tools (with Python bindings) for Bayesian time series"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{name = "Ed Herbst"}]
-dependencies = ["numpy", "pandas", "tqdm"]
+dependencies = ["numpy", "pandas", "tqdm", "dsge"]
+
+[tool.uv.sources]
+dsge = { path = "/home/eherbst/Dropbox/code/dsge", editable = true }  
 
 [project.scripts]
 fortress-smc = "fortress._cli:run_smc"

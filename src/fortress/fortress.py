@@ -8,6 +8,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 from typing import Dict, Mapping, MutableMapping, Optional, Sequence, Union
+import site
 
 import numpy as np
 import pandas as p
@@ -287,6 +288,10 @@ CMAKE_TEMPLATE = textwrap.dedent(
     target_link_libraries(smc_driver PRIVATE OpenMP::OpenMP_Fortran)
     endif()
 
+    target_compile_options(smc_driver PRIVATE
+    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-ffree-line-length-none>
+    )
+
     set_target_properties(smc_driver PROPERTIES
     Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod"
     )
@@ -314,32 +319,29 @@ def _resolve_cmake_executable() -> str:
         ) from exc
 
 
+
+
+
 def _discover_cmake_package_dir(
     explicit_dir: Optional[Union[str, Path]] = None
 ) -> Path:
-    candidates = []
-    if explicit_dir is not None:
-        candidates.append(Path(explicit_dir))
-    env_dir = os.environ.get("FORTRESS_CMAKE_DIR")
-    package_root = Path(__file__).resolve().parent
-    candidates.extend(
-        [
-            Path(env_dir) if env_dir else None,
-            package_root / "lib/cmake/fortress",
-            package_root.parent / "lib/cmake/fortress",
-        ]
-    )
+    """
+    Discover the fortress CMake package directory.
+    """
+    if explicit_dir:
+        return Path(explicit_dir)
 
-    for candidate in candidates:
-        if not candidate:
-            continue
-        candidate = candidate.resolve()
-        config = candidate / "fortressConfig.cmake"
-        if config.exists():
+    # Search in standard site-packages locations
+    for site_packages_dir in site.getsitepackages():
+        candidate = Path(site_packages_dir) / "fortress" / "lib" / "cmake" / "fortress"
+        if (candidate / "fortressConfig.cmake").exists():
             return candidate
-        matches = list(candidate.glob("**/fortressConfig.cmake"))
-        if matches:
-            return matches[0].parent
+
+    # Fallback for development environments
+    package_root = Path(__file__).resolve().parent
+    dev_candidate = package_root / "lib" / "cmake" / "fortress"
+    if (dev_candidate / "fortressConfig.cmake").exists():
+        return dev_candidate
 
     raise RuntimeError(
         "Could not locate fortressConfig.cmake. Set FORTRESS_CMAKE_DIR or install the package."

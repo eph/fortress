@@ -13,6 +13,8 @@ module fortress_smc_t
   use fortress_constants, only: BAD_LOG_LIKELIHOOD
   use fortress_smc_utilities, only: generate_random_blocks, ess_gap, bisection
   use json_module, only: json_core, json_value
+  use fortress_dashboard, only: update_dashboard, finish_dashboard, hide_cursor, show_cursor
+
   use fortress_info
 #:if defined('ENABLE_MPI')
   use mpi_f08, only: MPI_Barrier, MPI_Bcast, MPI_Comm_size, MPI_Comm_rank, MPI_DOUBLE_PRECISION, MPI_Gather, MPI_INTEGER, &
@@ -207,13 +209,19 @@ contains
        smc%target_acpt = 0.65_wp
     endif
 
+
   end function new_smc
 
   subroutine estimate(self, rank)
+    use ansi_codes, only: ansi_print, progress_bar, CLR_LINE, CURSOR_UP
+    implicit none
 
     class(fortress_smc), intent(inout) :: self
-
     integer, intent(in) :: rank
+
+
+    character(len=512) :: dashboard_string
+    logical :: resampling_flag
 
     character(len=:), allocatable :: estimation_name
 
@@ -313,14 +321,15 @@ contains
     end if
 
     i = 2
+    if (rank == 0 .and. self%verbose) call hide_cursor()
     do while (i <= self%temp%nstages)
     !do i = 2, self%temp%nstages
        previous_T = self%temp%T_schedule(i-1)
        current_T = self%temp%T_schedule(i)
 
        if (self%verbose) then
-          print*,'Stage', i, 'of', self%temp%nstages, 'with', current_T, 'observations'
-          print*,'last stage had', previous_T, 'observations'
+          !print*,'Stage', i, 'of', self%temp%nstages, 'with', current_T, 'observations'
+          !print*,'last stage had', previous_T, 'observations'
        end if
 
        phi = self%temp%phi_schedule(i)
@@ -391,41 +400,38 @@ contains
 
           self%temp%ESS_estimates(i) = parasim%ESS()
           if (isnan(self%temp%ESS_estimates(i) )) stop
-          if (self%verbose) then
-             print*,'============================================================='
-             write(*,'(A,I8,A,I9)') 'Iteration', i,' of ', self%temp%nstages
-             write(*,'(A,I4,A,F8.5,A)') 'Current  (T,phi): (', current_T, ',', phi, ')'
-             write(*,'(A,I4,A,F8.5,A)') 'Previous (T,phi): (', previous_T, ',', phi_old, ')'
-             write(*,'(A,F8.2, A, I8.0)',advance='no')        'Current ESS     :', self%temp%ESS_estimates(i), ' /', self%npart
-          end if
+
+          resampling_flag = .false.
           !------------------------------------------------------------
           ! Selection
           !------------------------------------------------------------
-          !print*,self%temp%ESS_estimates(i), ahat, scale, phi, current_T
           if ((self%temp%ESS_estimates(i) < self%npart * 0.5_wp) .or. &
-              (self%resample_every_period .eqv. .true.))then 
-             !.or. (self%endog_tempering)) then
-             if (self%verbose) write(*,'(A)') ' [resampling]'
+              (self%resample_every_period .eqv. .true.))then
+             resampling_flag = .true.
              call parasim%systematic_resampling(uu(i,1), resample_ind)
 
              parasim%prior = parasim%prior(resample_ind)
              parasim%loglh = parasim%loglh(resample_ind)
              parasim%loglhold = parasim%loglhold(resample_ind)
 
-          else
-             if (self%verbose) print*, ''
+          end if
+
+          if (self%verbose) then
+             write(dashboard_string, '(A,A,I8,A,I9,A,F8.2,A,I8,A,L1,A,F8.5,A,I4,A,A,F4.2,A,F10.8,A,A,A,A)') & 
+                  CLR_LINE, 'Iteration ', i, ' of ', self%temp%nstages, &
+                  ' | ESS: ', self%temp%ESS_estimates(i), ' / ', self%npart, &
+                  ' | Resampling: ', resampling_flag, &
+                  ' | Phi: ', phi, ' (', current_T, ')', &
+                  ' | Acpt: ', ahat, ' [c = ', scale, ']', &
+                  ' | [', progress_bar(real(i,kind=wp), real(self%temp%nstages,kind=wp), 20), ']'
+             if (rank == 0) call update_dashboard(dashboard_string)
+             !call ansi_print(message=dashboard_string, clear_line=.false.)
           end if
 
           eps = self%rng%norm_rvs(self%model%npara, self%npart*self%nintmh)
           u = self%rng%uniform_rvs(self%nblocks*self%nintmh*self%npart, 1)
           call parasim%mean_and_variance(mean, variance)
-          if (self%verbose) then
-             write(*,'(A)') '             mu    std'
-             write(*,'(A)') '           -----  -----'
-             do bj = 1, self%model%npara
-                write(*, '(A,I3,A,F7.3,F7.3)') 'para[',bj,']',mean(bj), sqrt(variance(bj,bj))
-             end do
-          end if
+
           ! blocking
           ind = [ (bj, bj = 1,self%model%npara )]
           call generate_random_blocks(self%model%npara, self%nblocks, ind, break_points)
@@ -533,7 +539,7 @@ contains
 
           m = 1
           do while (info /= 0)
-             write(*,*) 'Cholesky decomposition failed, adding ', m, ' times 1e-3 to the diagonal'
+             !write(*,*) 'Cholesky decomposition failed, adding ', m, ' times 1e-3 to the diagonal'
              chol_var = variance
              do j = 1,self%model%npara
                 chol_var(j,j) = variance(j,j)+m*1.0e-3_wp
@@ -694,10 +700,7 @@ contains
                / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
           !print*,(0.80_wp + 0.40*exp(16.0_wp*(ahat - self%target_acpt)) &
           !     / (1.0_wp + exp(16.0_wp*(ahat - self%target_acpt))))
-          write(*,'(A,F4.2,A,F10.8,A)') 'MCMC average acceptance: ', ahat, ' [c = ', scale, ']'
-          write(*,'(A,F 10.2)') 'Log MDD estimate:', sum(self%temp%Z_estimates(1:i))
-          write(*,'(A,F 10.2)') 'Avg. Log Lik    :', sum(parasim%loglh * parasim%weights)
-          write(*,'(A,F 10.2)') 'Avg. Log Prior  :', sum(parasim%prior * parasim%weights)
+
 
           if ((phi == 1.0_wp) .and. (current_T >= self%T_write_thresh) )then
              write(chart, '(I3.3)') current_T
@@ -745,10 +748,14 @@ contains
        i = i + 1
     end do
 
+    
+
     if (rank==0) then
        if (self%verbose) then
-          print*,''
-          print*,'Finished SMC sampler! Writing output to '//self%output_file
+          call finish_dashboard()
+          call show_cursor()
+          !print*,''
+          !print*,'Finished SMC sampler! Writing output to '//self%output_file
        end if
        call self%temp%write_json(json_p)
        call json%print(json_p, self%output_file)
