@@ -186,6 +186,9 @@ function(fortress_configure_fortran_target target_name)
 
   target_compile_options(${target_name} PRIVATE
     $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-ffree-line-length-none>
+    $<$<AND:$<COMPILE_LANG_AND_ID:Fortran,GNU>,$<CONFIG:Release>>:-fno-backtrace>
+    $<$<AND:$<COMPILE_LANG_AND_ID:Fortran,GNU>,$<CONFIG:Release>>:-funroll-loops>
+    $<$<AND:$<COMPILE_LANG_AND_ID:Fortran,GNU>,$<CONFIG:Release>>:-fno-range-check>
   )
 
   if(TARGET ${FLAP_TARGET})
