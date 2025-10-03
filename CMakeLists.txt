@@ -8,7 +8,7 @@ include(CTest)
 # Build all libraries with PIC so they can link into the Python module.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(ENABLE_MPI "Build with MPI" OFF)
+option(ENABLE_MPI "Build with MPI" ON)
 option(ENABLE_OPENMP "Enable OpenMP parallelism when MPI is disabled" ON)
 option(USE_SYSTEM_JSONFORTRAN "Use system-installed JSON-Fortran" OFF)
 option(USE_SYSTEM_FLAP "Use system-installed FLAP" OFF)
