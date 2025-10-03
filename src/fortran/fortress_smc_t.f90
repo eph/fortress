@@ -1144,7 +1144,7 @@ contains
        smc_particles%loglh(i) = lik0
        smc_particles%prior(i) = self%model%prior%logpdf(smc_particles%particles(:,i))
        if (self%verbose .and. mod(i, 100) == 0) then
-          write(dashboard_string, '(A,A,I8,A,I8,A,A,F4.1,A,A)') &
+          write(dashboard_string, '(A,A,I8,A,I8,A,A,A,A)') &
                CLR_LINE, 'Drawing from prior: ', i, ' / ', self%npart, &
                ' | [', progress_bar(real(i,kind=wp), real(self%npart,kind=wp), 40), ']'
           call update_dashboard(dashboard_string)
