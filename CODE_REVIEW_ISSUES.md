@@ -547,8 +547,8 @@ if (abs(value) < TOLERANCE_SMALL) then
 - [ ] #1: Add LICENSE file
 - [x] #2: Fix version inconsistency ✅
 - [x] #3: Pin FLAP dependency ✅
-- [ ] #4: Fix unsafe system calls
-- [ ] #5: Audit memory leaks
+- [x] #4: Fix unsafe system calls ✅
+- [x] #5: Audit memory leaks (partial - Issues #10, #11 fixed) ✅
 - [ ] #6: Address MPI race conditions
 
 ### Phase 2: Important Improvements (1-2 months)
