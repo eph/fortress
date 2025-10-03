@@ -53,8 +53,8 @@ Generated: 2025-10-03
 
 ---
 
-### 4. Unsafe system calls
-**Status**: Open
+### 4. ✅ Unsafe system calls
+**Status**: Fixed (commit pending)
 **Priority**: Critical
 **Effort**: 1 day
 **Location**: `/src/fortran/fortress_util.f90:36`

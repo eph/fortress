@@ -21,20 +21,46 @@ module fortress_util
   end interface write_array_to_file
 contains
 
-  !TODO: rewrite this
+  !> Create a directory using system commands
+  !!
+  !! @param[in]  dir_name  Directory name to create
+  !! @param[out] retcode   Return code (0=success, 1=already exists, 2=creation failed)
   subroutine mkdir(dir_name, retcode)
+    use, intrinsic :: iso_fortran_env, only: error_unit
 
-    character(len=:), allocatable, intent(in) :: dir_name
-    integer, intent(out) :: retcode 
+    character(len=*), intent(in) :: dir_name
+    integer, intent(out) :: retcode
     logical :: direxists
+    integer :: cmdstat
+    character(len=256) :: cmdmsg
+    character(len=:), allocatable :: command
 
-    inquire(file=dir_name, exist=direxists)
+    ! Check if directory already exists
+    inquire(file=trim(dir_name)//'/.', exist=direxists)
     if (direxists) then
-       print *, 'directory already exists'
+       write(error_unit, '(a)') 'mkdir: directory already exists: '//trim(dir_name)
        retcode = 1
-    else
-       call system('mkdir '//dir_name)
-       retcode = 0
+       return
+    endif
+
+    ! Build command - use mkdir -p for robustness
+    command = 'mkdir -p "'//trim(dir_name)//'"'
+
+    ! Execute command using Fortran 2008 intrinsic
+    call execute_command_line(command, wait=.true., exitstat=retcode, cmdstat=cmdstat, cmdmsg=cmdmsg)
+
+    ! Check for execution errors
+    if (cmdstat /= 0) then
+       write(error_unit, '(a,i0)') 'mkdir: command execution failed with status ', cmdstat
+       if (len_trim(cmdmsg) > 0) write(error_unit, '(a)') 'mkdir: '//trim(cmdmsg)
+       retcode = 2
+       return
+    endif
+
+    ! Check mkdir exit status
+    if (retcode /= 0) then
+       write(error_unit, '(a,i0,a)') 'mkdir: failed to create directory (exit status ', retcode, '): '//trim(dir_name)
+       retcode = 2
     endif
 
   end subroutine mkdir
