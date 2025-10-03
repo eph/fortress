@@ -37,6 +37,9 @@ jobs:
             ENABLE_MPI=OFF
             USE_SYSTEM_JSONFORTRAN=OFF
             USE_SYSTEM_FLAP=OFF
+          CIBW_BEFORE_ALL_LINUX: "yum install -y openblas-devel lapack-devel"
+          CIBW_BEFORE_ALL_MACOS: "brew install openblas lapack"
+          CIBW_BEFORE_ALL_WINDOWS: "choco install -y openblas"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           CIBW_ARCHS_MACOS: "x86_64 arm64"
