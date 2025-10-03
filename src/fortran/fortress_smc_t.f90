@@ -1093,6 +1093,7 @@ contains
 
 
   subroutine draw_from_prior(self, smc_particles, likT)
+    use ansi_codes, only: progress_bar, CLR_LINE
 
     class(fortress_smc) :: self
     type(fortress_smc_particles), intent(inout) :: smc_particles
@@ -1101,6 +1102,7 @@ contains
     integer :: i,j, neval
     real(wp) :: lik0, p0(self%model%npara)
     real(wp) :: paraextra(smc_particles%nvars, self%npriorextra)
+    character(len=500) :: dashboard_string
 
     j = 1
 
@@ -1141,11 +1143,15 @@ contains
 
        smc_particles%loglh(i) = lik0
        smc_particles%prior(i) = self%model%prior%logpdf(smc_particles%particles(:,i))
-       if (mod(i, 100) == 0) then
-          write(stdout,'(a$)') '+'
+       if (self%verbose .and. mod(i, 100) == 0) then
+          write(dashboard_string, '(A,A,I8,A,I8,A,A,F4.1,A,A)') &
+               CLR_LINE, 'Drawing from prior: ', i, ' / ', self%npart, &
+               ' | [', progress_bar(real(i,kind=wp), real(self%npart,kind=wp), 40), ']'
+          call update_dashboard(dashboard_string)
        endif
 
     end do
+    if (self%verbose) call finish_dashboard()
 
   end subroutine draw_from_prior
 
