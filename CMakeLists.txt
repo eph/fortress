@@ -298,10 +298,7 @@ install(TARGETS fortress_mod
   ARCHIVE DESTINATION fortress
 )
 
-install(DIRECTORY src/fortress/
-  DESTINATION fortress
-  FILES_MATCHING PATTERN "*.py"
-)
+
 
 # For SKBUILD (pip install), also install CMake config and static library to the package
 if(SKBUILD)
@@ -310,15 +307,24 @@ if(SKBUILD)
     ARCHIVE DESTINATION fortress/lib
   )
 
-  # Install Fortran module files
-  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static")
-    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
-      DESTINATION fortress/include
-      FILES_MATCHING PATTERN "*.mod"
-    )
-  endif()
+  # Install Fortran module files to the fortress package's include directory
+  install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
+    DESTINATION fortress/include
+    FILES_MATCHING PATTERN "*.mod"
+  )
+
+  # For editable installs, also copy mod files after build using a custom command
+  # This ensures mod files are available even when install() commands don't run
+  add_custom_command(TARGET fortress_static POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SKBUILD_PLATLIB_DIR}/fortress/include"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static"
+            "${SKBUILD_PLATLIB_DIR}/fortress/include"
+    COMMENT "Copying Fortran module files to install directory for editable installs"
+  )
 
   # Configure and install CMake config files for the package
+  # For SKBUILD installs, paths are relative to the fortress package root
   set(FORTRESS_INSTALL_INCLUDEDIR "include")
   set(FORTRESS_INSTALL_MODDIR "include")
 
@@ -516,12 +522,10 @@ if(NOT SKBUILD)
     INCLUDES DESTINATION ${FORTRESS_INSTALL_INCLUDEDIR}
   )
 
-  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static")
-    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
-      DESTINATION ${FORTRESS_INSTALL_INCLUDEDIR}
-      FILES_MATCHING PATTERN "*.mod"
-    )
-  endif()
+  install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mod_fortress_static/"
+    DESTINATION ${FORTRESS_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.mod"
+  )
 
   set(FORTRESS_INSTALL_MODDIR "${FORTRESS_INSTALL_INCLUDEDIR}")
 
