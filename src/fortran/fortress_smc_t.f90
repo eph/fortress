@@ -300,6 +300,7 @@ contains
     if (smc%verbose) then
        print*,'Initializing SMC for model: ', smc%model%name
        print*, smc%npart, smc%nphi
+       call print_environment_info(nproc)
     end if
 
 #:if not defined('ENABLE_MPI')
@@ -1154,6 +1155,65 @@ contains
     if (self%verbose) call finish_dashboard()
 
   end subroutine draw_from_prior
+
+  !> Print environment information (threads, MPI, etc.)
+  subroutine print_environment_info(nproc)
+    use, intrinsic :: iso_fortran_env, only: output_unit
+    integer, intent(in) :: nproc
+    character(len=256) :: env_value
+    integer :: status, omp_threads, openblas_threads
+
+    print '(a)', '─────────────────────────────────────────────────────────'
+    print '(a)', 'Environment Configuration:'
+    print '(a)', '─────────────────────────────────────────────────────────'
+
+    ! MPI configuration
+#:if defined('ENABLE_MPI')
+    print '(a,i0)', '  MPI:                 Enabled (nproc = ', nproc, ')'
+#:else
+    print '(a)', '  MPI:                 Disabled'
+#:endif
+
+    ! OpenMP threads
+#:if defined('ENABLE_OPENMP')
+    call get_environment_variable('OMP_NUM_THREADS', env_value, status=status)
+    if (status == 0 .and. len_trim(env_value) > 0) then
+       read(env_value, *, iostat=status) omp_threads
+       if (status == 0) then
+          print '(a,i0)', '  OMP_NUM_THREADS:     ', omp_threads
+       else
+          print '(a,a)', '  OMP_NUM_THREADS:     ', trim(env_value)
+       end if
+    else
+       print '(a)', '  OMP_NUM_THREADS:     Not set (using default)'
+    end if
+#:else
+    print '(a)', '  OpenMP:              Disabled'
+#:endif
+
+    ! OpenBLAS threads
+    call get_environment_variable('OPENBLAS_NUM_THREADS', env_value, status=status)
+    if (status == 0 .and. len_trim(env_value) > 0) then
+       read(env_value, *, iostat=status) openblas_threads
+       if (status == 0) then
+          print '(a,i0)', '  OPENBLAS_NUM_THREADS:', openblas_threads
+       else
+          print '(a,a)', '  OPENBLAS_NUM_THREADS:', trim(env_value)
+       end if
+    else
+       print '(a)', '  OPENBLAS_NUM_THREADS:Not set (using default)'
+    end if
+
+    ! MKL threads (if using MKL instead of OpenBLAS)
+    call get_environment_variable('MKL_NUM_THREADS', env_value, status=status)
+    if (status == 0 .and. len_trim(env_value) > 0) then
+       print '(a,a)', '  MKL_NUM_THREADS:     ', trim(env_value)
+    end if
+
+    print '(a)', '─────────────────────────────────────────────────────────'
+    print '(a)', ''
+
+  end subroutine print_environment_info
 
   !> Finalizer for fortress_smc - automatically deallocates components
   subroutine cleanup_fortress_smc(self)
