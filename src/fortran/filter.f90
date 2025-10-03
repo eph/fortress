@@ -212,7 +212,20 @@ contains
           ! iFt = inv(Ft)
           call dcopy(ngood*ngood, Ft, 1, iFt, 1)
           call dpotrf('u', ngood, iFt, ngood, info)
+          if (info /= 0) then
+             ! Cholesky factorization failed - matrix not positive definite
+             deallocate(oind, Ft, iFt, iFtnut, Kt, KtiFt, ZZPt, nut, yhat)
+             loglh = really_small
+             return
+          end if
+
           call dpotri('u', ngood, iFt, ngood, info)
+          if (info /= 0) then
+             ! Matrix inversion failed
+             deallocate(oind, Ft, iFt, iFtnut, Kt, KtiFt, ZZPt, nut, yhat)
+             loglh = really_small
+             return
+          end if
 
 
           ! det(Ft)
@@ -258,9 +271,8 @@ contains
 
 
 
-       deallocate(oind)
-
-       deallocate(Ft,iFt,iFtnut,Kt,KtiFt,ZZPt,nut,yhat)
+       ! Consolidate deallocations to prevent split cleanup issues
+       deallocate(oind, Ft, iFt, iFtnut, Kt, KtiFt, ZZPt, nut, yhat)
     end do
 
 
@@ -353,7 +365,20 @@ contains
           ! iFt = inv(Ft)
           call dcopy(ngood*ngood, Ft, 1, iFt, 1)
           call dpotrf('u', ngood, iFt, ngood, info)
+          if (info /= 0) then
+             ! Cholesky factorization failed - matrix not positive definite
+             deallocate(oind, Ft, iFt, iFtnut, Kt, KtiFt, ZZPt, nut, yhat)
+             loglh = really_small
+             return
+          end if
+
           call dpotri('u', ngood, iFt, ngood, info)
+          if (info /= 0) then
+             ! Matrix inversion failed
+             deallocate(oind, Ft, iFt, iFtnut, Kt, KtiFt, ZZPt, nut, yhat)
+             loglh = really_small
+             return
+          end if
 
 
           ! det(Ft)
