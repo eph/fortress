@@ -1,5 +1,5 @@
 module tvt_t
-  use, intrinsic :: iso_fortran_env, only: wp => real64
+  use, intrinsic :: iso_fortran_env, only: wp => real64, stderr => error_unit
 
   use fortress_bayesian_model_t, only: fortress_abstract_bayesian_model
   use fortress_prior_t, only: fortress_abstract_prior
@@ -63,6 +63,7 @@ contains
   end subroutine clean_MinnesotaPrior
 
   function mvnormal_pdf(x, mu, chol_sigma) result(logq)
+    use, intrinsic :: iso_fortran_env, only: stderr => error_unit
     !! Computes the log of the n-dimensional multivariate normal pdf at x
     !! with mean mu and variance = chol_sigma*chol_sigma'.
     !!
@@ -76,8 +77,8 @@ contains
     n = size(x, 1)
 
     if (n /= size(mu, 1)) then
-       print*, 'mvnormal pdf, size error'
-       stop
+       write(stderr,'(a,i0,a,i0)') 'ERROR: mvnormal pdf size mismatch - x has ', n, ' elements but mu has ', size(mu, 1)
+       stop 1
     endif
 
     det_sigma = 1.0_wp
@@ -592,6 +593,7 @@ end subroutine construct_SVAR
 
 
   function mvnormal_pdf(x, mu, chol_sigma) result(logq)
+    use, intrinsic :: iso_fortran_env, only: stderr => error_unit
     !! Computes the log of the n-dimensional multivariate normal pdf at x
     !! with mean mu and variance = chol_sigma*chol_sigma'.
     !!
@@ -605,8 +607,8 @@ end subroutine construct_SVAR
     n = size(x, 1)
 
     if (n /= size(mu, 1)) then
-       print*, 'mvnormal pdf, size error'
-       stop
+       write(stderr,'(a,i0,a,i0)') 'ERROR: mvnormal pdf size mismatch - x has ', n, ' elements but mu has ', size(mu, 1)
+       stop 1
     endif
 
     det_sigma = 1.0_wp

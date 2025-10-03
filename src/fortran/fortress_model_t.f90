@@ -6,7 +6,7 @@
 !
 module fortress_bayesian_model_t
 
-  use, intrinsic :: iso_fortran_env, only: wp => real64
+  use, intrinsic :: iso_fortran_env, only: wp => real64, stderr => error_unit
   use fortress_prior_t, only: fortress_abstract_prior, model_prior => prior
   use fortress_util, only: read_array_from_file
   use filter, only: kalman_filter, chand_recursion, kalman_filter_missing, REALLY_NEG
@@ -318,8 +318,8 @@ contains
     l(1) = REALLY_NEG
 
     if ( (T < 0) .or. (T>self%T)) then
-       print*,'ERROR: Bad T'
-       stop
+       write(stderr,'(a,i0,a,i0)') 'ERROR: Invalid time period T=', T, ' (must be between 0 and ', self%T, ')'
+       stop 1
     end if
 
     if (.not. self%inbounds(para)) return
@@ -367,9 +367,9 @@ function dlik(self, para, T) result(dl)
   integer, intent(in), optional :: T
 
   real(wp) :: dl(self%npara)
-  
-  print*,'dlik not implemented!'
-  stop
+
+  write(stderr,'(a)') 'ERROR: dlik() function not implemented for this model type'
+  stop 1
 
 
 end function dlik

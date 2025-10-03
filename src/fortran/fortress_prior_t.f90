@@ -132,8 +132,8 @@ contains
           pr%pupper(i) = 50.000000d0
 
        case default
-          print*,'ERROR: in prior(.), parameter', i, 'has a misspecified prior'
-          stop
+          write(error_unit,'(a,i0,a)') 'ERROR: Parameter ', i, ' has a misspecified prior type'
+          stop 1
        end select
     end do
 
@@ -397,8 +397,8 @@ contains
     n = size(x, 1)
 
     if (n /= size(mu, 1)) then
-       print*, 'mvnormal pdf, size error'
-       stop
+       write(error_unit,'(a,i0,a,i0)') 'ERROR: mvnormal pdf size mismatch - x has ', n, ' elements but mu has ', size(mu, 1)
+       stop 1
     endif
 
     det_sigma = 1.0_wp
