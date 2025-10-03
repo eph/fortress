@@ -289,15 +289,15 @@ test/
 
 ---
 
-### 18. JSON-Fortran version not pinned
-**Status**: Open
+### 18. ✅ JSON-Fortran version not pinned
+**Status**: Fixed (already pinned to 9.0.5)
 **Priority**: Important
 **Effort**: 5 minutes
-**Location**: `/cmake/FetchJSONFortran.cmake`
+**Location**: `/cmake/FetchJSONFortran.cmake:5`
 
 **Issue**: Similar to FLAP, JSON-Fortran dependency should be pinned.
 
-**Recommendation**: Add `GIT_TAG` to `FetchContent_Declare`.
+**Resolution**: JSON-Fortran was already pinned to version 9.0.5 (latest stable).
 
 ---
 
@@ -544,19 +544,21 @@ if (abs(value) < TOLERANCE_SMALL) then
 ## Implementation Roadmap
 
 ### Phase 1: Critical Fixes (1-2 weeks)
-- [ ] #1: Add LICENSE file
+- [x] #1: Add LICENSE file ✅
 - [x] #2: Fix version inconsistency ✅
 - [x] #3: Pin FLAP dependency ✅
 - [x] #4: Fix unsafe system calls ✅
-- [x] #5: Audit memory leaks (partial - Issues #10, #11 fixed) ✅
+- [x] #5: Audit memory leaks (Issues #10, #11 fixed, finalizers added) ✅
 - [ ] #6: Address MPI race conditions
 
 ### Phase 2: Important Improvements (1-2 months)
-- [ ] #7-10: Code quality (error handling, constants, debug cleanup)
+- [x] #7: Error handling - descriptive error messages ✅
+- [ ] #8-10: Code quality (constants, debug cleanup, fixed unit numbers)
 - [ ] #11-12: Architecture (refactor Python wrapper, reduce dependencies)
 - [ ] #13-14: Testing (expand coverage, reorganize tests)
 - [ ] #15-17: Documentation (API docs, README, docstrings)
-- [ ] #18-20: Build system (pin deps, document, uninstall)
+- [x] #18: Build system - pin deps ✅
+- [ ] #19-20: Build system (document, uninstall)
 - [ ] #21-28: Performance & robustness
 
 ### Phase 3: Polish (ongoing)
