@@ -39,6 +39,7 @@ module fortress_smc_t
 
      contains
        procedure :: write_json
+       final :: cleanup_tempering_schedule
 
   end type tempering_schedule
 
@@ -83,6 +84,7 @@ module fortress_smc_t
      procedure :: estimate
      procedure :: draw_from_prior
      procedure :: evaluate_time_t_lik
+     final :: cleanup_fortress_smc
   end type fortress_smc
 
   interface fortress_smc
@@ -130,6 +132,17 @@ contains
 
   end subroutine write_json
 
+  !> Finalizer for tempering_schedule - automatically deallocates components
+  subroutine cleanup_tempering_schedule(self)
+    type(tempering_schedule), intent(inout) :: self
+
+    if (allocated(self%phi_schedule)) deallocate(self%phi_schedule)
+    if (allocated(self%Z_estimates)) deallocate(self%Z_estimates)
+    if (allocated(self%ESS_estimates)) deallocate(self%ESS_estimates)
+    if (allocated(self%T_schedule)) deallocate(self%T_schedule)
+
+  end subroutine cleanup_tempering_schedule
+
   type(fortress_smc) function new_smc(model_p, nproc) result(smc)
 
     class(fortress_abstract_bayesian_model) :: model_p
@@ -144,31 +157,145 @@ contains
     smc%cli = initialize_cli()
     call smc%cli%parse()
 
-    ! parse the command line
-    call smc%cli%get(switch='-n',val=smc%npart,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-p',val=smc%nphi,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-b',val=smc%lambda,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-m',val=smc%nintmh,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-i',val=smc%trial,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-c',val=smc%initial_c,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-n',val=smc%npart,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-we',val=smc%write_every,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-sh',val=smc%save_hyper,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-fh',val=smc%fixed_hyper,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-od',val=smc%output_file,error=err); if (err /=0) stop 1
-    call smc%cli%get(switch='-s',val=smc%seed,error=err); if (err /=0) stop 1
-    call smc%cli%get(switch='-nb',val=smc%nblocks,error=err); if (err /=0) stop 1
-    call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err); if (err /=0) stop 1
-    call smc%cli%get(switch='-rep',val=smc%resample_every_period,error=err); if (err /=0) stop 1
-    call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-L',val=smc%L,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-bt',val=smc%bisection_thresh,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-mt',val=smc%mutation_type,error=err); if (err/=0) stop 1
-    call smc%cli%get(switch='-pf',val=smc%init_file,error=err); if(err/=0) stop 1
-    call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err); if(err/=0) stop 1
-    call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err); if(err/=0) stop 1
-    call smc%cli%get(switch='-q',val=quiet_flag,error=err); if (err/=0) stop 1
+    ! parse the command line - check for errors and cleanup on failure
+    call smc%cli%get(switch='-n',val=smc%npart,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -n (number of particles)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-p',val=smc%nphi,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -p (number of stages)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-b',val=smc%lambda,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -b (lambda parameter)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-m',val=smc%nintmh,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -m (number of MH steps)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-i',val=smc%trial,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -i (trial number)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-c',val=smc%initial_c,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -c (initial c parameter)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-we',val=smc%write_every,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -we (write every)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-sh',val=smc%save_hyper,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -sh (save hyperparameters)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-fh',val=smc%fixed_hyper,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -fh (fixed hyperparameters)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-od',val=smc%output_file,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -od (output directory)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-s',val=smc%seed,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -s (random seed)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-nb',val=smc%nblocks,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -nb (number of blocks)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-cc',val=smc%conditional_covariance,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -cc (conditional covariance)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-rep',val=smc%resample_every_period,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -rep (resample every period)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-rt',val=smc%resample_tol,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -rt (resample tolerance)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-et',val=smc%endog_tempering,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -et (endogenous tempering)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-L',val=smc%L,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -L (L parameter)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-bt',val=smc%bisection_thresh,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -bt (bisection threshold)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-mt',val=smc%mutation_type,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -mt (mutation type)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-pf',val=smc%init_file,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -pf (particle file)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-pe',val=smc%npriorextra,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -pe (number prior extra)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-twt',val=smc%T_write_thresh,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -twt (T write threshold)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
+    call smc%cli%get(switch='-q',val=quiet_flag,error=err)
+    if (err/=0) then
+       write(stderr,'(a)') 'ERROR: Failed to parse -q (quiet flag)'
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
+    end if
     smc%verbose = .not. quiet_flag
     if (smc%verbose) then
        print*,'Initializing SMC for model: ', smc%model%name
@@ -181,7 +308,8 @@ contains
 
     if (.not.(mod(smc%npart, nproc) == 0)) then
        write(stderr, '(a)') 'ERROR: npart must be divisible by nsim!'
-       stop
+       if (allocated(smc%model)) deallocate(smc%model)
+       stop 1
     end if
 
     smc%nproc = nproc
@@ -363,7 +491,13 @@ contains
              else
                 do while (isnan(ess_gap1))
                    phi0 = max(phi0 , phi_old+0.01_wp)
-                   if (phi0 < phi_old) stop
+                   if (phi0 < phi_old) then
+                      write(stderr,'(a)') 'ERROR: phi0 < phi_old in bisection - tempering failed'
+                      call parasim%free()
+                      call nodepara%free()
+                      if (rank == 0) call json%destroy(json_p)
+                      stop 1
+                   end if
                    ess_gap1 = ess_gap(phi0, phi_old, parasim, self%resample_tol)
                    !print*,phi0,ess_gap1
                 end do
@@ -399,7 +533,13 @@ contains
           self%temp%Z_estimates(i) = log(Zt) + maxincwt
 
           self%temp%ESS_estimates(i) = parasim%ESS()
-          if (isnan(self%temp%ESS_estimates(i) )) stop
+          if (isnan(self%temp%ESS_estimates(i))) then
+             write(stderr,'(a)') 'ERROR: ESS is NaN - particle weights collapsed'
+             call parasim%free()
+             call nodepara%free()
+             if (rank == 0) call json%destroy(json_p)
+             stop 1
+          end if
 
           resampling_flag = .false.
           !------------------------------------------------------------
@@ -977,8 +1117,10 @@ contains
 
 
        if ((lik0 <= BAD_LOG_LIKELIHOOD ) .and. (self%init_file /= 'none')) then
-          print*,'Error with initial particle files'
-          stop
+          write(stderr,'(a)') 'ERROR: Bad likelihood with initial particle file: '//trim(self%init_file)
+          write(stderr,'(a,i0)') 'ERROR: Particle index: ', i
+          write(stderr,'(a,es12.4)') 'ERROR: Log-likelihood: ', lik0
+          stop 1
        end if
 
        do while (lik0 <= BAD_LOG_LIKELIHOOD)
@@ -989,8 +1131,10 @@ contains
 
           j = j + 1
           if (j > self%npriorextra) then
-             write(stderr, *) 'Prior is too far from likelihood ... '
-             stop
+             write(stderr,'(a)') 'ERROR: Prior is too far from likelihood'
+             write(stderr,'(a,i0)') 'ERROR: Exhausted all ', self%npriorextra, ' prior draws'
+             write(stderr,'(a)') 'ERROR: Consider increasing -pe (npriorextra) or adjusting prior'
+             stop 1
           end if
 
        end do
@@ -1005,7 +1149,13 @@ contains
 
   end subroutine draw_from_prior
 
+  !> Finalizer for fortress_smc - automatically deallocates components
+  subroutine cleanup_fortress_smc(self)
+    type(fortress_smc), intent(inout) :: self
 
+    if (allocated(self%model)) deallocate(self%model)
+
+  end subroutine cleanup_fortress_smc
 
 
 end module fortress_smc_t

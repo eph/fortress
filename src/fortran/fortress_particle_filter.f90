@@ -1,5 +1,5 @@
 module fortress_particle_filter_t
-  use, intrinsic :: iso_fortran_env, only: wp => real64
+  use, intrinsic :: iso_fortran_env, only: wp => real64, stderr => error_unit
 #:if defined('ENABLE_MPI')
   use mpi_f08, only: MPI_COMM_WORLD, MPI_DOUBLE_PRECISION, MPI_INTEGER, MPI_MIN, MPI_SUM, MPI_Request, MPI_Status, &
        MPI_Allgather, MPI_Allreduce, MPI_Barrier, MPI_Irecv, MPI_Isend, MPI_Wait
@@ -285,9 +285,16 @@ contains
     end do
 
     if (sum(old_local%weights) == 0.0d0) then
-       print*,'divergence on rank ', rank
+       write(stderr,'(a,i0)') 'ERROR: Particle filter divergence on rank ', rank
        lik = -1000000000.0
-       stop
+       ! Clean up before stopping
+       call old_local%free()
+       call new_local%free()
+       call old_copy%free()
+       call old_foreign%free()
+       call alt_copy%free()
+       call alt_foreign%free()
+       stop 1
     end if
     old_copy = old_local 
 
