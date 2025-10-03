@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main, develop]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.compiler }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler: [gfortran]
+        include:
+          # Specific gfortran versions
+          - os: ubuntu-latest
+            compiler: gfortran-11
+          - os: ubuntu-latest
+            compiler: gfortran-12
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gfortran \
+            libblas-dev \
+            liblapack-dev \
+            cmake \
+            ninja-build
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc cmake ninja
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_MPI=OFF \
+            -DUSE_SYSTEM_JSONFORTRAN=OFF \
+            -DUSE_SYSTEM_FLAP=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: |
+          cd build
+          ctest --output-on-failure --verbose
+
+  test-mpi:
+    name: Test with MPI (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies with MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gfortran \
+            libopenmpi-dev \
+            openmpi-bin \
+            libblas-dev \
+            liblapack-dev \
+            cmake \
+            ninja-build
+
+      - name: Configure CMake with MPI
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_MPI=ON \
+            -DUSE_SYSTEM_JSONFORTRAN=OFF \
+            -DUSE_SYSTEM_FLAP=OFF
+
+      - name: Build with MPI
+        run: cmake --build build --parallel
+
+      - name: Run tests with MPI
+        run: |
+          cd build
+          ctest --output-on-failure --verbose
+
+  python-build:
+    name: Python build test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libblas-dev liblapack-dev
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gcc
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Build Python package (editable)
+        run: |
+          uv pip install --system -e . --no-build-isolation
+        env:
+          ENABLE_MPI: "OFF"
+          USE_SYSTEM_JSONFORTRAN: "OFF"
+          USE_SYSTEM_FLAP: "OFF"
+
+      - name: Test Python import
+        run: |
+          python -c "import fortress; print('fortress version:', fortress.__version__)"
+
+  lint:
+    name: Code quality checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for trailing whitespace
+        run: |
+          ! git grep -n '[[:space:]]$' -- '*.f90' '*.py' '*.cmake' || \
+          (echo "Found trailing whitespace in the lines above" && false)
+
+      - name: Check for tabs in Fortran/Python
+        run: |
+          ! git grep -n $'\t' -- '*.f90' '*.py' || \
+          (echo "Found tabs in the files above (use spaces)" && false)
