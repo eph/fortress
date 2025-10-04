@@ -7,60 +7,108 @@ on:
 
 jobs:
   build-wheels:
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, macos-14, windows-2022]
+        include:
+          # Linux
+          - os: ubuntu-22.04
+            cibw_archs_macos: ""
+            cibw_archs_windows: ""
+            mac: false
+            win: false
+
+          # macOS Intel -> x86_64
+          - os: macos-13
+            cibw_archs_macos: "x86_64"
+            cibw_archs_windows: ""
+            mac: true
+            win: false
+
+          # macOS Apple Silicon -> arm64
+          - os: macos-14
+            cibw_archs_macos: "arm64"
+            cibw_archs_windows: ""
+            mac: true
+            win: false
+
+          # Windows
+          - os: windows-2022
+            cibw_archs_macos: ""
+            cibw_archs_windows: "AMD64"
+            mac: false
+            win: true
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # ---------- macOS: install & locate Homebrew gfortran + BLAS/LAPACK ----------
+      - name: Install Homebrew gcc + BLAS/LAPACK
+        if: ${{ matrix.mac }}
+        run: brew install gcc openblas lapack
+
+      - name: Discover gfortran path (macOS)
+        if: ${{ matrix.mac }}
+        id: gf
+        shell: bash
+        run: |
+          BREW_BIN="$(brew --prefix)/bin"
+          GFORTRAN="${BREW_BIN}/$(ls "$BREW_BIN" | grep -E '^gfortran-[0-9]+$' | tail -n1)"
+          echo "gfortran=$GFORTRAN" >> "$GITHUB_OUTPUT"
+          echo "openblas_prefix=$(brew --prefix openblas)" >> "$GITHUB_OUTPUT"
+          echo "lapack_prefix=$(brew --prefix lapack)" >> "$GITHUB_OUTPUT"
+
+      # ---------- Python toolchain ----------
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - run: python -m pip install -U pip cibuildwheel
 
-
-      - name: Discover gfortran path (macOS)
-        if: startsWith(matrix.os, 'mac')
-        id: gf
-        shell: bash
-        run: |
-          # Homebrew names it gfortran-<major>
-          BREW_BIN="$(brew --prefix)/bin"
-          GFORTRAN="${BREW_BIN}/$(ls "$BREW_BIN" | grep -E '^gfortran-[0-9]+$' | tail -n1)"
-          echo "gfortran=$GFORTRAN" >> "$GITHUB_OUTPUT"
-          echo "openblas_prefix=$(brew --prefix openblas)" >> "$GITHUB_OUTPUT"
-          echo "lapack_prefix=$(brew --prefix lapack)" >> "$GITHUB_OUTPUT"
-          
-      - name: Install Intel oneAPI Fortran
-        if: startsWith(matrix.os, 'windows')
+      # ---------- Windows: install ifx only here ----------
+      - name: Install Intel oneAPI Fortran (Windows)
+        if: ${{ matrix.win }}
         uses: rscohn2/setup-oneapi@v0
         with:
           components: ifx-compiler
 
+      # ---------- Build wheels ----------
       - name: Build wheels
-        run: python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-*"
-          CIBW_SKIP: "pp* *-musllinux_*"
+          CIBW_SKIP: "*-musllinux_*"
+
+          # feed common flags into the build backend
           CIBW_ENVIRONMENT: >
             ENABLE_MPI=OFF
             USE_SYSTEM_JSONFORTRAN=OFF
             USE_SYSTEM_FLAP=OFF
-          CIBW_BEFORE_ALL_LINUX: "yum install -y openblas-devel lapack-devel"
-          CIBW_BEFORE_ALL_MACOS: "brew install openblas lapack gcc"
-          CIBW_BEFORE_ALL_WINDOWS: "choco install -y openblas"
+
+          # Linux deps inside manylinux containers
+          CIBW_BEFORE_ALL_LINUX: "yum install -y gcc-gfortran openblas-devel lapack-devel"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-          CIBW_ARCHS_MACOS: "x86_64 arm64"
+
+          # macOS: build only the arch matching this runner
+          CIBW_ARCHS_MACOS: "${{ matrix.cibw_archs_macos }}"
           CIBW_ENVIRONMENT_MACOS: >
             MACOSX_DEPLOYMENT_TARGET=11.0
             CMAKE_OSX_DEPLOYMENT_TARGET=11.0
-          CIBW_ARCHS_WINDOWS: "AMD64"
-          CMAKE_Fortran_COMPILER: ifx
+            FC=${{ steps.gf.outputs.gfortran }}
+            CMAKE_Fortran_COMPILER=${{ steps.gf.outputs.gfortran }}
+            LDFLAGS="-L${{ steps.gf.outputs.openblas_prefix }}/lib -L${{ steps.gf.outputs.lapack_prefix }}/lib"
+            CPPFLAGS="-I${{ steps.gf.outputs.openblas_prefix }}/include -I${{ steps.gf.outputs.lapack_prefix }}/include"
+            PKG_CONFIG_PATH="${{ steps.gf.outputs.openblas_prefix }}/lib/pkgconfig:${{ steps.gf.outputs.lapack_prefix }}/lib/pkgconfig"
+
+          # Windows: enable ifx here (NOT globally)
+          CIBW_ARCHS_WINDOWS: "${{ matrix.cibw_archs_windows }}"
+          CIBW_ENVIRONMENT_WINDOWS: >
+            FC=ifx
+            CMAKE_Fortran_COMPILER=ifx
+          CIBW_BEFORE_ALL_WINDOWS: "choco install -y openblas"
+        run: python -m cibuildwheel --output-dir wheelhouse
 
       - uses: actions/upload-artifact@v4
         with:
