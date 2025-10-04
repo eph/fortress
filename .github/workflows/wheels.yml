@@ -96,8 +96,8 @@ jobs:
           # macOS: build only the arch matching this runner
           CIBW_ARCHS_MACOS: "${{ matrix.cibw_archs_macos }}"
           CIBW_ENVIRONMENT_MACOS: >
-            MACOSX_DEPLOYMENT_TARGET=11.0
-            CMAKE_OSX_DEPLOYMENT_TARGET=11.0
+            MACOSX_DEPLOYMENT_TARGET=14.0
+            CMAKE_OSX_DEPLOYMENT_TARGET=14.0
             FC=${{ steps.gf.outputs.gfortran }}
             CMAKE_Fortran_COMPILER=${{ steps.gf.outputs.gfortran }}
             LDFLAGS="-L${{ steps.gf.outputs.openblas_prefix }}/lib -L${{ steps.gf.outputs.lapack_prefix }}/lib"
