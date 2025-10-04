@@ -16,10 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Fortran compiler
-        if: startsWith(matrix.os, 'mac')
-        run: brew install gcc
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -42,7 +38,7 @@ jobs:
             USE_SYSTEM_JSONFORTRAN=OFF
             USE_SYSTEM_FLAP=OFF
           CIBW_BEFORE_ALL_LINUX: "yum install -y openblas-devel lapack-devel"
-          CIBW_BEFORE_ALL_MACOS: "brew install openblas lapack"
+          CIBW_BEFORE_ALL_MACOS: "brew install openblas lapack gcc"
           CIBW_BEFORE_ALL_WINDOWS: "choco install -y openblas"
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
