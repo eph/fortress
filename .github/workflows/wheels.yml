@@ -22,6 +22,7 @@ jobs:
           - os: macos-13
             cibw_archs_macos: "x86_64"
             cibw_archs_windows: ""
+            mac_min: "13.0"
             mac: true
             win: false
 
@@ -29,6 +30,7 @@ jobs:
           - os: macos-14
             cibw_archs_macos: "arm64"
             cibw_archs_windows: ""
+            mac_min: "14.0"
             mac: true
             win: false
 
